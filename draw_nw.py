@@ -3,12 +3,10 @@
 import bpy
 import gpu
 import mathutils
+import typing
 import math
 import gpu_extras.batch
-
-
-COLOR_OUTER = mathutils.Vector((1.0, 1.0, 0.0, 0.4))
-COLOR_INNER = COLOR_OUTER * 0.8
+from . import prefs
 
 
 def prefs_line_width():
@@ -182,13 +180,13 @@ def get_region_borders(context: bpy.types.Context):
 
 
 def is_node_partially_in_view(node: bpy.types.Node, context: bpy.types.Context) -> bool:
-    nx, ny = node.location.x, node.location.y
+    nx, ny = get_node_location(node)
     bx, by, b_xw, b_yh = get_region_borders(context)
     return nx < b_xw and ny - node.dimensions.y < b_yh and nx + node.dimensions.x > bx and ny > by
 
 
 def get_node_clamped_position(node: bpy.types.Node, context: bpy.types.Context, offset = (10, 10)):
-    nx, ny = node.location.x, node.location.y
+    nx, ny = get_node_location(node)
     bx, by, b_xw, b_yh = get_region_borders(context)
     hx_dim, hy_dim = node.dimensions.x / 2.0, node.dimensions.y / 2.0
 
@@ -210,21 +208,25 @@ def get_node_clamped_position(node: bpy.types.Node, context: bpy.types.Context, 
     return rx, ry
 
 
-def main_draw(self, context: bpy.types.Context):
+def main_draw(self, context: bpy.types.Context, nodes: typing.Set[bpy.types.Node]):
+    prefs_ = prefs.get_preferences(context)
     if not (context.area.type == 'NODE_EDITOR' and context.region.type == 'WINDOW'):
         return
     
     prev_state = gpu.state.blend_get()
     gpu.state.blend_set('ALPHA')
+    inner = prefs_.highlight_color
+    outer = mathutils.Vector(prefs_.highlight_color) * prefs_.border_attenuation
 
-    for node in context.selected_nodes:
+    for node in nodes:
         if is_node_partially_in_view(node, context):
             x, y = get_node_location(node)
             cx, cy = context.region.view2d.view_to_region(x + (node.dimensions.x / 2.0), y - (node.dimensions.y / 2.0))
-            draw_rounded_node_border(node, radius=6, colour=COLOR_OUTER)
-            draw_rounded_node_border(node, radius=5, colour=COLOR_INNER)
+            draw_rounded_node_border(node, radius=5, colour=inner)
+            draw_rounded_node_border(node, radius=5 + prefs_.border_size, colour=outer)
         else:
             cx, cy = context.region.view2d.view_to_region(*get_node_clamped_position(node, context))
-            draw_circle_2d_filled(cx, cy, 10.0, (1, 1, 0 , 1))
+            draw_circle_2d_filled(cx, cy, 10.0, inner)
+            draw_circle_2d_filled(cx, cy, 10.0 + prefs_.border_size, outer)
 
     gpu.state.blend_set(prev_state)
