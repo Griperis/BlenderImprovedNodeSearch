@@ -175,6 +175,18 @@ class AdvancedNodeSearch(bpy.types.Operator):
 CLASSES.append(AdvancedNodeSearch)
 
 
+class ClearSearch(bpy.types.Operator):
+    bl_idname = "node_search.clear"
+    bl_label = "Clear Search"
+
+    def execute(self, context: bpy.types.Context):
+        FOUND_NODES.clear()
+        return {'FINISHED'}
+    
+
+CLASSES.append(ClearSearch)
+
+
 class AdvancedNodeSearchPanel(bpy.types.Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
@@ -193,7 +205,9 @@ class AdvancedNodeSearchPanel(bpy.types.Panel):
             icon='OUTLINER_DATA_LIGHT')
         
         if len(FOUND_NODES) > 0:
-            layout.label(text=f"Found {len(FOUND_NODES)} node(s)")
+            row = layout.row()
+            row.label(text=f"Found {len(FOUND_NODES)} node(s)")
+            row.operator(ClearSearch.bl_idname, icon='PANEL_CLOSE', text="")
             layout.separator()
         
         layout.prop(prefs_, "highlight_color")
