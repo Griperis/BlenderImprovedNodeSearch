@@ -68,6 +68,8 @@ class Preferences(bpy.types.AddonPreferences):
     search: bpy.props.StringProperty()
     attribute_search: bpy.props.StringProperty()
 
+    search_in_node_groups: bpy.props.BoolProperty()
+
     filter_by_type: bpy.props.BoolProperty()
     filter_by_attribute: bpy.props.BoolProperty()
 

@@ -15,9 +15,15 @@ FilterType = typing.Callable[[bpy.types.Node, str], bool]
 
 
 class NodeSearch:
-    def __init__(self, node_tree: bpy.types.NodeTree, filters: set[FilterType]):
+    def __init__(
+        self, 
+        node_tree: bpy.types.NodeTree,
+        filters: set[FilterType],
+        search_in_node_groups: bool = True
+    ):
         self.node_tree = node_tree
         self.filters = filters
+        self.search_in_node_groups = search_in_node_groups
         self.processed_node_trees = {}
         self.nested_node_tree_finds = {}
 
@@ -41,13 +47,14 @@ class NodeSearch:
         
         for node in node_tree.nodes:
             if hasattr(node, "node_tree"):
-                found_nodes = self._search_and_recurse(node.node_tree, depth + 1)
-                ret.update(found_nodes)
-                if len(found_nodes) > 0:
-                    if depth == 0:
-                        self.nested_node_tree_finds[node.node_tree] = len(found_nodes)
-                        ret.add(node)
-                self.processed_node_trees[node_tree] = found_nodes
+                if self.search_in_node_groups:
+                    found_nodes = self._search_and_recurse(node.node_tree, depth + 1)
+                    ret.update(found_nodes)
+                    if len(found_nodes) > 0:
+                        if depth == 0:
+                            self.nested_node_tree_finds[node.node_tree] = len(found_nodes)
+                            ret.add(node)
+                    self.processed_node_trees[node_tree] = found_nodes
 
             # If any filter returns True for given node, we consider it in the result
             for filter_ in self.filters:
@@ -141,6 +148,8 @@ class AdvancedNodeSearch(bpy.types.Operator):
         layout.prop(prefs_, "search")
         layout.separator()
 
+        layout.prop(prefs_, "search_in_node_groups")
+
         # We don't show filtering by type if filtering by attribute is shown
         if not prefs_.filter_by_attribute or context.area.ui_type != 'GeometryNodeTree':
             layout.prop(prefs_, "filter_by_type")
@@ -178,7 +187,7 @@ class AdvancedNodeSearch(bpy.types.Operator):
         node_tree = context.space_data.edit_tree
         FOUND_NODES.clear()
         NODE_TREE_OCCURRENCES.clear()
-        node_search = NodeSearch(node_tree, filters_)
+        node_search = NodeSearch(node_tree, filters_, prefs_.search_in_node_groups)
         found_nodes = node_search.search()
         ToggleSearchOverlay.node_tree = node_tree
         FOUND_NODES.update(found_nodes)
