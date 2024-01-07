@@ -8,22 +8,55 @@ from . import draw
 
 CLASSES = []
 FOUND_NODES = set()
+NODE_TREE_OCCURRENCES = {}
 
 
-def search_nodes(node_tree, filters) -> typing.Set[bpy.types.Node]:
-    ret = set()
-    for node in node_tree.nodes:
-        if hasattr(node, "node_tree"):
-            ret.update(search_nodes(node.node_tree, filters))
+FilterType = typing.Callable[[bpy.types.Node, str], bool]
+
+
+class NodeSearch:
+    def __init__(self, node_tree: bpy.types.NodeTree, filters: set[FilterType]):
+        self.node_tree = node_tree
+        self.filters = filters
+        self.processed_node_trees = {}
+        self.nested_node_tree_finds = {}
+
+    def search(self) -> set[bpy.types.Node]:
+        """Searched the node tree, while counting the nested node tree finds.
         
-        # If any filter returns True for given node, we consider it in the result
-        for filter_ in filters:
-            if filter_(node):
+        Returns top level nodes that match the filters.
+        """
+        ret = set()
+        all_found_nodes = self._search_and_recurse(self.node_tree)
+        for node in self.node_tree.nodes:
+            if node in all_found_nodes:
                 ret.add(node)
-                break
-    
-    return ret
-    
+
+        return ret
+
+    def _search_and_recurse(self, node_tree: bpy.types.NodeTree, depth: int = 0) -> set[bpy.types.Node]:
+        ret = set()
+        if node_tree in self.processed_node_trees:
+            return self.processed_node_trees[node_tree]
+        
+        for node in node_tree.nodes:
+            if hasattr(node, "node_tree"):
+                found_nodes = self._search_and_recurse(node.node_tree, depth + 1)
+                ret.update(found_nodes)
+                if len(found_nodes) > 0:
+                    if depth == 0:
+                        self.nested_node_tree_finds[node.node_tree] = len(found_nodes)
+                        ret.add(node)
+                self.processed_node_trees[node_tree] = found_nodes
+
+            # If any filter returns True for given node, we consider it in the result
+            for filter_ in self.filters:
+                if filter_(node):
+                    ret.add(node)
+                    break
+        
+        return ret
+
 
 def node_name_filter(node: bpy.types.Node, name: str) -> bool:
     return name.lower() in node.name.lower()
@@ -54,29 +87,17 @@ def attribute_filter(node: bpy.types.GeometryNode, name: str) -> bool:
     return False
 
 
-# unique_attribute_names = set()
-# for node_tree in bpy.data.node_groups:
-#     print(f"Node Tree: {node_tree.name}")
-#     nodes = search_nodes(node_tree, attribute_filter)
-#     for node in nodes:
-#         if isinstance(node, bpy.types.GeometryNodeInputNamedAttribute):
-#             unique_attribute_names.add(node.inputs[0].default_value)
-#         elif isinstance(node, bpy.types.GeometryNodeStoreNamedAttribute):
-#             unique_attribute_names.add(node.inputs[1].default_value)
-            
-
-# print(unique_attribute_names)
-
-
 class ToggleSearchOverlay(bpy.types.Operator):
     bl_idname = "node_search.toggle_overlay"
     bl_label = "Overlay Search Results"
 
     handle = None
+    # Node tree reference to draw only in the right context
+    node_tree = None
 
     def add_draw_handler(self, context: bpy.types.Context):
         ToggleSearchOverlay.handle = bpy.types.SpaceNodeEditor.draw_handler_add(
-            draw.highlight_nodes, (self, context, FOUND_NODES), 'WINDOW', 'POST_PIXEL')
+            draw.highlight_nodes, (self, context, FOUND_NODES, NODE_TREE_OCCURRENCES), 'WINDOW', 'POST_PIXEL')
 
     @staticmethod
     def remove_draw_handler():
@@ -139,7 +160,8 @@ class AdvancedNodeSearch(bpy.types.Operator):
     def execute(self, context):
         prefs_ = prefs.get_preferences(context)
         filters_ = set()
-        filters_.add(lambda x: node_name_filter(x, prefs_.search))
+        if prefs_.search != "":
+            filters_.add(lambda x: node_name_filter(x, prefs_.search))
 
         if prefs_.filter_by_attribute:
             filters_.add(lambda x: attribute_filter(x, prefs_.attribute_search))
@@ -155,8 +177,12 @@ class AdvancedNodeSearch(bpy.types.Operator):
         
         node_tree = context.space_data.edit_tree
         FOUND_NODES.clear()
-        found_nodes = search_nodes(node_tree, filters_)
+        NODE_TREE_OCCURRENCES.clear()
+        node_search = NodeSearch(node_tree, filters_)
+        found_nodes = node_search.search()
+        ToggleSearchOverlay.node_tree = node_tree
         FOUND_NODES.update(found_nodes)
+        NODE_TREE_OCCURRENCES.update(node_search.nested_node_tree_finds)
 
         if len(found_nodes) > 0:
             self.report({'INFO'}, f"Found {len(found_nodes)} nodes")
@@ -215,6 +241,17 @@ class AdvancedNodeSearchPanel(bpy.types.Panel):
         layout.prop(prefs_, "highlight_color")
         layout.prop(prefs_, "border_attenuation", slider=True)
         layout.prop(prefs_, "border_size")
+        layout.prop(prefs_, "text_size")
 
+        col = layout.column(align=True)
+        for node in FOUND_NODES:
+            col.label(text=node.name)
+            col.label(text=node.bl_idname)
+            col.separator()
+
+        col = layout.column(align=True)
+        for node_tree, value in NODE_TREE_OCCURRENCES.items():
+            col.label(text=node_tree.name)
+            col.label(text=str(value))
 
 CLASSES.append(AdvancedNodeSearchPanel)

@@ -4,10 +4,10 @@
 # created by Bartek Skorupa, Greg Zaal, Sebastian Koenig, Christian Brinkmann, Florian Meyer 
 
 import bpy
+import blf
 import mathutils
 import gpu
 import gpu_extras.presets
-import typing
 import math
 import gpu_extras.batch
 from . import prefs
@@ -212,9 +212,25 @@ def get_node_clamped_position(node: bpy.types.Node, context: bpy.types.Context, 
     return rx, ry
 
 
-def highlight_nodes(self, context: bpy.types.Context, nodes: typing.Set[bpy.types.Node]):
+def draw_text(x: float, y: float, text: str, size: float, colour: set[float, float, float, float]):
+    prev_state = gpu.state.blend_get()
+    blf.size(0, size)
+    w, h = blf.dimensions(0, text)
+    blf.position(0, x - w / 2.0, y - h / 2.0, 0)
+    blf.color(0, *colour)
+    blf.draw(0, text)
+
+    gpu.state.blend_set(prev_state)
+
+
+def highlight_nodes(
+    self,
+    context: bpy.types.Context,
+    nodes: set[bpy.types.Node],
+    node_tree_occurrences: dict[bpy.types.NodeTree, int] | None = None
+) -> None:
     prefs_ = prefs.get_preferences(context)
-    if not (context.area.type == 'NODE_EDITOR' and context.region.type == 'WINDOW'):
+    if not (context.area.type == 'NODE_EDITOR' and context.region.type == 'WINDOW' and context.space_data.edit_tree == self.node_tree):
         return
     
     prev_state = gpu.state.blend_get()
@@ -223,14 +239,26 @@ def highlight_nodes(self, context: bpy.types.Context, nodes: typing.Set[bpy.type
     outer = mathutils.Vector(prefs_.highlight_color) * prefs_.border_attenuation
 
     for node in nodes:
+        # This count is going to be > 0 only for node groups that should be highlighted with
+        # the number text.
+        inside_node_count = 0
+        if node_tree_occurrences is not None and hasattr(node, "node_tree"):
+            inside_node_count = node_tree_occurrences.get(node.node_tree, 0)
+
         if is_node_partially_in_view(node, context):
             x, y = get_node_location(node)
             cx, cy = context.region.view2d.view_to_region(x + (node.dimensions.x / 2.0), y - (node.dimensions.y / 2.0))
             draw_rounded_node_border(node, radius=5, colour=inner)
             draw_rounded_node_border(node, radius=5 + prefs_.border_size, colour=outer)
+
+            if inside_node_count > 0:
+                tx, ty = context.region.view2d.view_to_region(x + (node.dimensions.x / 2.0), y - node.dimensions.y - prefs_.text_size)
+                draw_text(tx, ty, str(inside_node_count), prefs_.text_size, inner)
         else:
             cx, cy = context.region.view2d.view_to_region(*get_node_clamped_position(node, context))
             draw_circle_2d_filled(cx, cy, 10.0, inner)
             draw_circle_2d_filled(cx, cy, 10.0 + prefs_.border_size, outer)
+            if inside_node_count > 0:
+                draw_text(cx, cy, str(inside_node_count), prefs_.text_size, (1.0, 1.0, 1.0, 1.0))
 
     gpu.state.blend_set(prev_state)

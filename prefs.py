@@ -47,6 +47,12 @@ class Preferences(bpy.types.AddonPreferences):
         default=10.0
     )
 
+    text_size: bpy.props.FloatProperty(
+        name="Text Size (px)",
+        min=0.0,
+        default=25.0
+    )
+
     geometry_node_types: bpy.props.EnumProperty(
         items=lambda _, __: get_geometry_node_types_enum_items()
     )
