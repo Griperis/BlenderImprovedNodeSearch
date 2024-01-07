@@ -25,9 +25,22 @@ CLASSES = [
 ] + search.CLASSES
 
 
+KEYMAPS = []
+
+
 def register():
+    KEYMAPS.clear()
+
     for cls in CLASSES:
         bpy.utils.register_class(cls)
+
+    wm = bpy.context.window_manager
+    if wm.keyconfigs.addon is None:
+        return
+    
+    km = wm.keyconfigs.addon.keymaps.new(name='Node Editor', space_type='NODE_EDITOR')
+    kmi = km.keymap_items.new(search.AdvancedNodeSearch.bl_idname, 'F', 'PRESS', ctrl=True)
+    KEYMAPS.append((km, kmi))
 
 
 def unregister():
@@ -36,3 +49,8 @@ def unregister():
 
     if search.ToggleSearchOverlay.handle is not None:
         search.ToggleSearchOverlay.remove_draw_handler()
+
+    for km, kmi in KEYMAPS:
+        km.keymap_items.remove(kmi)
+    
+    KEYMAPS.clear()
