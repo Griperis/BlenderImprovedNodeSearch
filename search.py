@@ -1,7 +1,9 @@
+# copyright (c) Zdenek Dolezal 
+
 import bpy
 import typing
 from . import prefs
-from . import draw_nw
+from . import draw
 
 
 CLASSES = []
@@ -74,7 +76,7 @@ class ToggleSearchOverlay(bpy.types.Operator):
 
     def add_draw_handler(self, context: bpy.types.Context):
         ToggleSearchOverlay.handle = bpy.types.SpaceNodeEditor.draw_handler_add(
-            draw_nw.main_draw, (self, context, FOUND_NODES), 'WINDOW', 'POST_PIXEL')
+            draw.highlight_nodes, (self, context, FOUND_NODES), 'WINDOW', 'POST_PIXEL')
 
     @staticmethod
     def remove_draw_handler():

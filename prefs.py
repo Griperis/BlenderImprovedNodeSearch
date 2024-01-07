@@ -1,3 +1,5 @@
+# copyright (c) Zdenek Dolezal 
+
 import bpy
 import typing
 
