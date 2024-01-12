@@ -224,6 +224,56 @@ class ClearSearch(bpy.types.Operator):
 CLASSES.append(ClearSearch)
 
 
+class SelectFoundNodes(bpy.types.Operator):
+    bl_idname = "node_search.select_found"
+    bl_label = "Select Found Nodes"
+
+    def execute(self, context: bpy.types.Context):
+        bpy.ops.node.select_all(action='DESELECT')
+        for node in FOUND_NODES:
+            node.select = True
+        return {'FINISHED'}
+
+
+CLASSES.append(SelectFoundNodes)
+
+
+class CycleFoundNodes(bpy.types.Operator):
+    bl_idname = "node_search.cycle_found"
+    bl_label = "Cycle Found Nodes"
+
+    direction: bpy.props.IntProperty(default=1, min=-1, max=1)
+
+    index = 0
+
+    def execute(self, context: bpy.types.Context):
+        if len(FOUND_NODES) == 0:
+            return {'FINISHED'}
+        
+        new_index = CycleFoundNodes.index + self.direction
+        # clamp next_index to boundaries of FOUND_NODES
+        if new_index > len(FOUND_NODES) - 1:
+            new_index = 0
+        elif new_index < 0:
+            new_index = len(FOUND_NODES) - 1
+
+        # We sort the found nodes by name, as set is unordered
+        node = sorted(list(FOUND_NODES), key=lambda x: x.name)[new_index]
+        print(f"Trying to select {node.name}" )
+
+        # Context override doesn't work for some reason here
+        # TODO: Store and restore selection here
+        bpy.ops.node.select_all(action='DESELECT')
+        node.select = True
+        bpy.ops.node.view_selected()    
+        node.select = False
+
+        CycleFoundNodes.index = new_index
+        return {'FINISHED'}
+
+
+CLASSES.append(CycleFoundNodes)
+
 class AdvancedNodeSearchPanel(bpy.types.Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
@@ -246,7 +296,12 @@ class AdvancedNodeSearchPanel(bpy.types.Panel):
             row.label(text=f"Found {len(FOUND_NODES)} node(s)")
             row.operator(ClearSearch.bl_idname, icon='PANEL_CLOSE', text="")
             layout.separator()
-        
+            row = layout.row()
+            row.operator(SelectFoundNodes.bl_idname, text="Select")
+            row.operator(CycleFoundNodes.bl_idname, text="Prev").direction = -1
+            row.operator(CycleFoundNodes.bl_idname, text="Next").direction = 1
+
+
         layout.prop(prefs_, "highlight_color")
         layout.prop(prefs_, "border_attenuation", slider=True)
         layout.prop(prefs_, "border_size")
