@@ -191,25 +191,21 @@ def is_node_partially_in_view(node: bpy.types.Node, context: bpy.types.Context) 
     return nx < b_xw and ny - node.dimensions.y < b_yh and nx + node.dimensions.x > bx and ny > by
 
 
-def get_node_clamped_position(node: bpy.types.Node, context: bpy.types.Context, offset=(10, 10)):
+def get_node_clamped_position(node: bpy.types.Node, context: bpy.types.Context):
     nx, ny = get_node_location(node)
     bx, by, b_xw, b_yh = get_region_borders(context)
     hx_dim, hy_dim = node.dimensions.x / 2.0, node.dimensions.y / 2.0
 
-    rx, ry = nx, ny
-    ox, oy = offset
+    rx, ry = nx + hx_dim, ny - hy_dim
     if nx + node.dimensions.x < bx:
-        rx = bx + ox
-        ry = ry - hy_dim
+        rx = bx
     if nx > b_xw:
-        rx = b_xw - ox
-        ry = ry - hy_dim
+        rx = b_xw - 10.0
+
     if ny < by:
-        ry = by + oy
-        rx = rx + hx_dim
+        ry = by
     if ny - node.dimensions.y > b_yh:
-        ry = b_yh - oy
-        rx = rx + hx_dim
+        ry = b_yh - 10.0
 
     return rx, ry
 
