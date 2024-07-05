@@ -43,25 +43,16 @@ class Preferences(bpy.types.AddonPreferences):
 
     text_size: bpy.props.FloatProperty(name="Text Size (px)", min=0.0, default=25.0)
 
-    geometry_node_types: bpy.props.EnumProperty(
-        items=lambda _, __: get_geometry_node_types_enum_items()
-    )
-
-    compositor_node_types: bpy.props.EnumProperty(
-        items=lambda _, __: get_compositor_node_types_enum_items()
-    )
-
-    shader_node_types: bpy.props.EnumProperty(
-        items=lambda _, __: get_shader_node_types_enum_items()
-    )
-
     search: bpy.props.StringProperty()
-    attribute_search: bpy.props.StringProperty()
+
+    search_in_name: bpy.props.BoolProperty(default=True)
+    search_in_label: bpy.props.BoolProperty()
+    search_in_blidname: bpy.props.BoolProperty()
 
     search_in_node_groups: bpy.props.BoolProperty()
 
-    filter_by_type: bpy.props.BoolProperty()
     filter_by_attribute: bpy.props.BoolProperty()
+    attribute_search: bpy.props.StringProperty()
 
 
 def get_preferences(context: typing.Optional[bpy.types.Context] = None) -> Preferences:

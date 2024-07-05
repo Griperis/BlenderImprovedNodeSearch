@@ -71,8 +71,12 @@ def node_name_filter(node: bpy.types.Node, name: str) -> bool:
     return name.lower() in node.name.lower()
 
 
-def type_filter(node: bpy.types.Node, name: str) -> bool:
-    return node.bl_idname == name
+def node_blidname_filter(node: bpy.types.Node, value: str) -> bool:
+    return value.lower() in node.bl_idname.lower()
+
+
+def node_label_filter(node: bpy.types.Node, value: str) -> bool:
+    return value.lower() in node.label.lower()
 
 
 def attribute_filter(node: bpy.types.GeometryNode, name: str) -> bool:
@@ -159,18 +163,11 @@ class PerformNodeSearch(bpy.types.Operator):
         layout.prop(prefs_, "search")
         layout.separator()
 
-        layout.prop(prefs_, "search_in_node_groups")
+        layout.prop(prefs_, "search_in_name")
+        layout.prop(prefs_, "search_in_label")
+        layout.prop(prefs_, "search_in_blidname")
 
-        # We don't show filtering by type if filtering by attribute is shown
-        if not prefs_.filter_by_attribute or context.area.ui_type != 'GeometryNodeTree':
-            layout.prop(prefs_, "filter_by_type")
-            if prefs_.filter_by_type:
-                if context.area.ui_type == 'GeometryNodeTree':
-                    layout.prop(prefs_, "geometry_node_types")
-                elif context.area.ui_type == 'ShaderNodeTree':
-                    layout.prop(prefs_, "shader_node_types")
-                elif context.area.ui_type == 'CompositorNodeTree':
-                    layout.prop(prefs_, "compositor_node_types")
+        layout.prop(prefs_, "search_in_node_groups")
 
         if context.area.ui_type == 'GeometryNodeTree':
             layout.prop(prefs_, "filter_by_attribute")
@@ -180,22 +177,15 @@ class PerformNodeSearch(bpy.types.Operator):
     def execute(self, context):
         prefs_ = prefs.get_preferences(context)
         filters_ = set()
-        if prefs_.search != "":
+        if prefs_.search_in_name:
             filters_.add(lambda x: node_name_filter(x, prefs_.search))
+        if prefs_.search_in_label:
+            filters_.add(lambda x: node_label_filter(x, prefs_.search))
+        if prefs_.search_in_blidname:
+            filters_.add(lambda x: node_blidname_filter(x, prefs_.search))
 
         if prefs_.filter_by_attribute:
             filters_.add(lambda x: attribute_filter(x, prefs_.attribute_search))
-
-        if prefs_.filter_by_type and (
-            not prefs_.filter_by_attribute or context.area.ui_type != 'GeometryNodeTree'
-        ):
-            # Append the correct attribute filter with types from prefs_ based on the node tree type
-            if context.area.ui_type == 'GeometryNodeTree':
-                filters_.add(lambda x: type_filter(x, prefs_.geometry_node_types))
-            elif context.area.ui_type == 'ShaderNodeTree':
-                filters_.add(lambda x: type_filter(x, prefs_.shader_node_types))
-            elif context.area.ui_type == 'CompositorNodeTree':
-                filters_.add(lambda x: type_filter(x, prefs_.compositor_node_types))
 
         node_tree = context.space_data.edit_tree
         FOUND_NODES.clear()
