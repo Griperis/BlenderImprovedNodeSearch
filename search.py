@@ -177,6 +177,14 @@ class PerformNodeSearch(bpy.types.Operator):
     def execute(self, context):
         prefs_ = prefs.get_preferences(context)
         filters_ = set()
+        if prefs_.search == "" and not prefs_.filter_by_attribute:
+            self.report({'WARNING'}, "No search input provided")
+            return {'CANCELLED'}
+
+        if prefs_.filter_by_attribute and prefs_.attribute_search == "":
+            self.report({'WARNING'}, "No attribute search input provided")
+            return {'CANCELLED'}
+
         if prefs_.search_in_name:
             filters_.add(lambda x: node_name_filter(x, prefs_.search))
         if prefs_.search_in_label:
