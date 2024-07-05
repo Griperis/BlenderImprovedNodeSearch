@@ -1,4 +1,4 @@
-# copyright (c) Zdenek Dolezal 
+# copyright (c) Zdenek Dolezal
 
 import bpy
 import typing
@@ -16,10 +16,10 @@ FilterType = typing.Callable[[bpy.types.Node, str], bool]
 
 class NodeSearch:
     def __init__(
-        self, 
+        self,
         node_tree: bpy.types.NodeTree,
         filters: set[FilterType],
-        search_in_node_groups: bool = True
+        search_in_node_groups: bool = True,
     ):
         self.node_tree = node_tree
         self.filters = filters
@@ -29,7 +29,7 @@ class NodeSearch:
 
     def search(self) -> set[bpy.types.Node]:
         """Searched the node tree, while counting the nested node tree finds.
-        
+
         Returns top level nodes that match the filters.
         """
         ret = set()
@@ -40,11 +40,13 @@ class NodeSearch:
 
         return ret
 
-    def _search_and_recurse(self, node_tree: bpy.types.NodeTree, depth: int = 0) -> set[bpy.types.Node]:
+    def _search_and_recurse(
+        self, node_tree: bpy.types.NodeTree, depth: int = 0
+    ) -> set[bpy.types.Node]:
         ret = set()
         if node_tree in self.processed_node_trees:
             return self.processed_node_trees[node_tree]
-        
+
         for node in node_tree.nodes:
             if hasattr(node, "node_tree"):
                 if self.search_in_node_groups:
@@ -61,7 +63,7 @@ class NodeSearch:
                 if filter_(node):
                     ret.add(node)
                     break
-        
+
         return ret
 
 
@@ -74,14 +76,19 @@ def type_filter(node: bpy.types.Node, name: str) -> bool:
 
 
 def attribute_filter(node: bpy.types.GeometryNode, name: str) -> bool:
-    if isinstance(
-        node, (
-            bpy.types.GeometryNodeInputNamedAttribute,
-            bpy.types.GeometryNodeStoreNamedAttribute,
-            bpy.types.GeometryNodeRemoveAttribute
-    )) and name == "":   
+    if (
+        isinstance(
+            node,
+            (
+                bpy.types.GeometryNodeInputNamedAttribute,
+                bpy.types.GeometryNodeStoreNamedAttribute,
+                bpy.types.GeometryNodeRemoveAttribute,
+            ),
+        )
+        and name == ""
+    ):
         return True
-    
+
     # TODO: Find if the node.inputs[x] is connected to other node or not
     # and use the value from there.
     searched_name = name.lower()
@@ -104,7 +111,11 @@ class ToggleSearchOverlay(bpy.types.Operator):
 
     def add_draw_handler(self, context: bpy.types.Context):
         ToggleSearchOverlay.handle = bpy.types.SpaceNodeEditor.draw_handler_add(
-            draw.highlight_nodes, (self, context, FOUND_NODES, NODE_TREE_OCCURRENCES), 'WINDOW', 'POST_PIXEL')
+            draw.highlight_nodes,
+            (self, context, FOUND_NODES, NODE_TREE_OCCURRENCES),
+            'WINDOW',
+            'POST_PIXEL',
+        )
 
     @staticmethod
     def remove_draw_handler():
@@ -129,7 +140,7 @@ class ToggleSearchOverlay(bpy.types.Operator):
 CLASSES.append(ToggleSearchOverlay)
 
 
-class AdvancedNodeSearch(bpy.types.Operator):
+class PerformNodeSearch(bpy.types.Operator):
     bl_idname = "node_search.search"
     bl_label = "Search"
 
@@ -143,7 +154,7 @@ class AdvancedNodeSearch(bpy.types.Operator):
         if context.area.ui_type not in {'GeometryNodeTree', 'ShaderNodeTree', 'CompositorNodeTree'}:
             layout.label(text="Node search only works in node editors")
             return
-        
+
         # TODO: use regexes option
         layout.prop(prefs_, "search")
         layout.separator()
@@ -174,8 +185,10 @@ class AdvancedNodeSearch(bpy.types.Operator):
 
         if prefs_.filter_by_attribute:
             filters_.add(lambda x: attribute_filter(x, prefs_.attribute_search))
-        
-        if prefs_.filter_by_type and (not prefs_.filter_by_attribute or context.area.ui_type != 'GeometryNodeTree'):
+
+        if prefs_.filter_by_type and (
+            not prefs_.filter_by_attribute or context.area.ui_type != 'GeometryNodeTree'
+        ):
             # Append the correct attribute filter with types from prefs_ based on the node tree type
             if context.area.ui_type == 'GeometryNodeTree':
                 filters_.add(lambda x: type_filter(x, prefs_.geometry_node_types))
@@ -183,7 +196,7 @@ class AdvancedNodeSearch(bpy.types.Operator):
                 filters_.add(lambda x: type_filter(x, prefs_.shader_node_types))
             elif context.area.ui_type == 'CompositorNodeTree':
                 filters_.add(lambda x: type_filter(x, prefs_.compositor_node_types))
-        
+
         node_tree = context.space_data.edit_tree
         FOUND_NODES.clear()
         NODE_TREE_OCCURRENCES.clear()
@@ -194,7 +207,7 @@ class AdvancedNodeSearch(bpy.types.Operator):
         NODE_TREE_OCCURRENCES.update(node_search.nested_node_tree_finds)
 
         if len(found_nodes) > 0:
-            self.report({'INFO'}, f"Found {len(found_nodes)} nodes")
+            self.report({'INFO'}, f"Found {len(found_nodes)} node(s)")
         else:
             self.report({'WARNING'}, "No nodes found")
 
@@ -209,7 +222,7 @@ class AdvancedNodeSearch(bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self)
 
 
-CLASSES.append(AdvancedNodeSearch)
+CLASSES.append(PerformNodeSearch)
 
 
 class ClearSearch(bpy.types.Operator):
@@ -219,7 +232,7 @@ class ClearSearch(bpy.types.Operator):
     def execute(self, context: bpy.types.Context):
         FOUND_NODES.clear()
         return {'FINISHED'}
-    
+
 
 CLASSES.append(ClearSearch)
 
@@ -249,7 +262,7 @@ class CycleFoundNodes(bpy.types.Operator):
     def execute(self, context: bpy.types.Context):
         if len(FOUND_NODES) == 0:
             return {'FINISHED'}
-        
+
         new_index = CycleFoundNodes.index + self.direction
         # clamp next_index to boundaries of FOUND_NODES
         if new_index > len(FOUND_NODES) - 1:
@@ -259,13 +272,13 @@ class CycleFoundNodes(bpy.types.Operator):
 
         # We sort the found nodes by name, as set is unordered
         node = sorted(list(FOUND_NODES), key=lambda x: x.name)[new_index]
-        print(f"Trying to select {node.name}" )
+        print(f"Trying to select {node.name}")
 
         # Context override doesn't work for some reason here
         # TODO: Store and restore selection here
         bpy.ops.node.select_all(action='DESELECT')
         node.select = True
-        bpy.ops.node.view_selected()    
+        bpy.ops.node.view_selected()
         node.select = False
 
         CycleFoundNodes.index = new_index
@@ -274,23 +287,28 @@ class CycleFoundNodes(bpy.types.Operator):
 
 CLASSES.append(CycleFoundNodes)
 
-class AdvancedNodeSearchPanel(bpy.types.Panel):
+
+class ImprovedNodeSearchPanel(bpy.types.Panel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
     bl_category = "Tool"
-    bl_label = "Advanced Search"
-    bl_idname = "NODE_EDITOR_PT_Advanced_Search"
+    bl_label = "Improved Search"
+    bl_idname = "NODE_EDITOR_PT_Improved_Search"
+
+    def draw_header(self, context: bpy.types.Context) -> None:
+        self.layout.label(text="", icon='VIEWZOOM')
 
     def draw(self, context):
         prefs_ = prefs.get_preferences(context)
         layout = self.layout
-        layout.operator(AdvancedNodeSearch.bl_idname, text="Search", icon='VIEWZOOM')
+        layout.operator(PerformNodeSearch.bl_idname, text="Search", icon='VIEWZOOM')
         layout.operator(
             ToggleSearchOverlay.bl_idname,
             depress=ToggleSearchOverlay.handle is not None,
             text="Overlay",
-            icon='OUTLINER_DATA_LIGHT')
-        
+            icon='OUTLINER_DATA_LIGHT',
+        )
+
         if len(FOUND_NODES) > 0:
             row = layout.row()
             row.label(text=f"Found {len(FOUND_NODES)} node(s)")
@@ -300,7 +318,6 @@ class AdvancedNodeSearchPanel(bpy.types.Panel):
             row.operator(SelectFoundNodes.bl_idname, text="Select")
             row.operator(CycleFoundNodes.bl_idname, text="Prev").direction = -1
             row.operator(CycleFoundNodes.bl_idname, text="Next").direction = 1
-
 
         layout.prop(prefs_, "highlight_color")
         layout.prop(prefs_, "border_attenuation", slider=True)
@@ -318,4 +335,5 @@ class AdvancedNodeSearchPanel(bpy.types.Panel):
             col.label(text=node_tree.name)
             col.label(text=str(value))
 
-CLASSES.append(AdvancedNodeSearchPanel)
+
+CLASSES.append(ImprovedNodeSearchPanel)

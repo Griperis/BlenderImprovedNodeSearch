@@ -1,7 +1,8 @@
-# copyright (c) Zdenek Dolezal 
+# copyright (c) Zdenek Dolezal
 
 import bpy
 import typing
+
 
 # TODO: Support arbitrary Node Trees
 def get_geometry_node_types_enum_items():
@@ -31,27 +32,16 @@ class Preferences(bpy.types.AddonPreferences):
         max=1.0,
         size=4,
         subtype='COLOR',
-        default=(1, 0.6, 0.1, 0.5)
+        default=(1, 0.6, 0.1, 0.5),
     )
 
     border_attenuation: bpy.props.FloatProperty(
-        name="Border Attenuation",
-        min=0.0,
-        max=1.0,
-        default=0.6
+        name="Border Attenuation", min=0.0, max=1.0, default=0.6
     )
 
-    border_size: bpy.props.FloatProperty(
-        name="Border Size (px)",
-        min=0.0,
-        default=10.0
-    )
+    border_size: bpy.props.FloatProperty(name="Border Size (px)", min=0.0, default=10.0)
 
-    text_size: bpy.props.FloatProperty(
-        name="Text Size (px)",
-        min=0.0,
-        default=25.0
-    )
+    text_size: bpy.props.FloatProperty(name="Text Size (px)", min=0.0, default=25.0)
 
     geometry_node_types: bpy.props.EnumProperty(
         items=lambda _, __: get_geometry_node_types_enum_items()

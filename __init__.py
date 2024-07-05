@@ -1,4 +1,4 @@
-# Blender Node Search - Powerful tool to find nodes in node trees.
+# Improved Node Search - Powerful tool to find nodes in node trees.
 # Author: Zdenek Dolezal
 # Licence: GPL 3.0
 
@@ -6,10 +6,10 @@
 # https://blender.stackexchange.com/questions/218096/translate-area-mouse-coordinates-to-the-the-node-editors-blackboard-coordinates
 
 bl_info = {
-    "name": "Node Search", # TODO: Node Finder?
+    "name": "Improved Node Search",
     "author": "Zdenek Dolezal",
     "version": (1, 0, 0),
-    "blender": (4, 0, 0),
+    "blender": (4, 2, 0),
     "location": "",
     "description": "",
     "category": "Node",
@@ -37,9 +37,9 @@ def register():
     wm = bpy.context.window_manager
     if wm.keyconfigs.addon is None:
         return
-    
+
     km = wm.keyconfigs.addon.keymaps.new(name='Node Editor', space_type='NODE_EDITOR')
-    kmi = km.keymap_items.new(search.AdvancedNodeSearch.bl_idname, 'F', 'PRESS', ctrl=True)
+    kmi = km.keymap_items.new(search.PerformNodeSearch.bl_idname, 'F', 'PRESS', ctrl=True)
     KEYMAPS.append((km, kmi))
 
 
@@ -52,5 +52,5 @@ def unregister():
 
     for km, kmi in KEYMAPS:
         km.keymap_items.remove(kmi)
-    
+
     KEYMAPS.clear()
