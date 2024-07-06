@@ -157,8 +157,8 @@ class PerformNodeSearch(bpy.types.Operator):
     def draw(self, context):
         prefs_ = prefs.get_preferences(context)
         layout = self.layout
-        if context.area.ui_type not in {'GeometryNodeTree', 'ShaderNodeTree', 'CompositorNodeTree'}:
-            layout.label(text="Node search only works in node editors")
+        if not context.area.ui_type.endswith("NodeTree"):
+            layout.label(text="Node search only works in node editors", icon='ERROR')
             return
 
         # TODO: use regexes option
