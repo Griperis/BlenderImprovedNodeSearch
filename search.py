@@ -7,7 +7,9 @@ from . import draw
 
 
 CLASSES = []
+# Set of found nodes for last search
 FOUND_NODES = set()
+# Mapping of node tree -> number of occurrences in last search
 NODE_TREE_OCCURRENCES = {}
 
 
@@ -111,7 +113,7 @@ class ToggleSearchOverlay(bpy.types.Operator):
 
     handle = None
     # Node tree reference to draw only in the right context
-    node_tree = None
+    node_tree: bpy.types.NodeTree | None = None
 
     def add_draw_handler(self, context: bpy.types.Context):
         ToggleSearchOverlay.handle = bpy.types.SpaceNodeEditor.draw_handler_add(
@@ -177,22 +179,22 @@ class PerformNodeSearch(bpy.types.Operator):
     def execute(self, context):
         prefs_ = prefs.get_preferences(context)
         filters_ = set()
-        if prefs_.search == "" and not prefs_.filter_by_attribute:
+
+        if (prefs_.search == "" and not prefs_.filter_by_attribute) or (
+            prefs_.attribute_search == "" and prefs_.filter_by_attribute
+        ):
             self.report({'WARNING'}, "No search input provided")
             return {'CANCELLED'}
 
-        if prefs_.filter_by_attribute and prefs_.attribute_search == "":
-            self.report({'WARNING'}, "No attribute search input provided")
-            return {'CANCELLED'}
+        if prefs_.search != "":
+            if prefs_.search_in_name:
+                filters_.add(lambda x: node_name_filter(x, prefs_.search))
+            if prefs_.search_in_label:
+                filters_.add(lambda x: node_label_filter(x, prefs_.search))
+            if prefs_.search_in_blidname:
+                filters_.add(lambda x: node_blidname_filter(x, prefs_.search))
 
-        if prefs_.search_in_name:
-            filters_.add(lambda x: node_name_filter(x, prefs_.search))
-        if prefs_.search_in_label:
-            filters_.add(lambda x: node_label_filter(x, prefs_.search))
-        if prefs_.search_in_blidname:
-            filters_.add(lambda x: node_blidname_filter(x, prefs_.search))
-
-        if prefs_.filter_by_attribute:
+        if prefs_.filter_by_attribute and prefs_.attribute_search != "":
             filters_.add(lambda x: attribute_filter(x, prefs_.attribute_search))
 
         node_tree = context.space_data.edit_tree

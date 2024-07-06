@@ -198,12 +198,12 @@ def get_node_clamped_position(node: bpy.types.Node, context: bpy.types.Context):
 
     rx, ry = nx + hx_dim, ny - hy_dim
     if nx + node.dimensions.x < bx:
-        rx = bx
+        rx = bx + 10.0
     if nx > b_xw:
         rx = b_xw - 10.0
 
     if ny < by:
-        ry = by
+        ry = by + 10.0
     if ny - node.dimensions.y > b_yh:
         ry = b_yh - 10.0
 
