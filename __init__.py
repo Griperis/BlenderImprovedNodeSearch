@@ -1,3 +1,4 @@
+# copyright (c) Zdenek Dolezal 2024-*
 # Improved Node Search - Powerful tool to find nodes in node trees.
 # Author: Zdenek Dolezal
 # Licence: GPL 3.0

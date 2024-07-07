@@ -1,4 +1,4 @@
-# copyright (c) Zdenek Dolezal
+# copyright (c) Zdenek Dolezal 2024-*
 
 # Code for drawing of the node borders is inspired by the NodeWrangler addon bundled in Blender,
 # created by Bartek Skorupa, Greg Zaal, Sebastian Koenig, Christian Brinkmann, Florian Meyer

@@ -1,4 +1,4 @@
-# copyright (c) Zdenek Dolezal
+# copyright (c) Zdenek Dolezal 2024-*
 
 import bpy
 import typing
@@ -95,8 +95,8 @@ def attribute_filter(node: bpy.types.GeometryNode, name: str) -> bool:
     ):
         return True
 
-    # TODO: Find if the node.inputs[x] is connected to other node or not
-    # and use the value from there.
+    # TODO: Finding if the node.inputs[x] is connected to other node or not
+    # and use the value from there would be a improvement.
     searched_name = name.lower()
     if isinstance(node, bpy.types.GeometryNodeInputNamedAttribute):
         return node.inputs[0].default_value.lower() == searched_name
@@ -107,9 +107,32 @@ def attribute_filter(node: bpy.types.GeometryNode, name: str) -> bool:
     return False
 
 
+def ensure_search_result_valid():
+    # TODO: Improve this, this crashes Blender, we need to be sure that we don't highlight and keep
+    # references to nodes, that do not longer exist in the node tree.
+    # Try except ReferenceError..., we have to do this at the right time
+    if ToggleSearchOverlay.node_tree is None:
+        return
+
+    for node in list(FOUND_NODES):
+        if node.name not in ToggleSearchOverlay.node_tree.nodes:
+            FOUND_NODES.remove(node)
+            print(f"Removing {node.name} from found nodes as it is no longer valid")
+            if (
+                hasattr(node, "node_tree")
+                and node.node_tree is not None
+                and node.node_tree in NODE_TREE_OCCURRENCES
+            ):
+                del NODE_TREE_OCCURRENCES[node.node_tree]
+                print(
+                    f"Removing {node.node_tree.name} from node tree occurrences as it is no longer valid"
+                )
+
+
 class ToggleSearchOverlay(bpy.types.Operator):
-    bl_idname = "node_search.toggle_overlay"
+    bl_idname = "improved_node_search.toggle_overlay"
     bl_label = "Overlay Search Results"
+    bl_description = "Toggle the visual display of the search results"
 
     handle = None
     # Node tree reference to draw only in the right context
@@ -131,6 +154,9 @@ class ToggleSearchOverlay(bpy.types.Operator):
     def modal(self, context, event):
         if context.area:
             context.area.tag_redraw()
+
+        # TODO: This crashes Blender
+        # ensure_search_result_valid()
         return {'PASS_THROUGH'}
 
     def invoke(self, context, event):
@@ -147,52 +173,67 @@ CLASSES.append(ToggleSearchOverlay)
 
 
 class PerformNodeSearch(bpy.types.Operator):
-    bl_idname = "node_search.search"
+    bl_idname = "improved_node_search.search"
     bl_label = "Search"
+    bl_description = "Search for nodes in the current node tree based on several criteria"
+    bl_property = "search"
+
+    search: bpy.props.StringProperty(
+        name="Search", description="Text to search for based on other options"
+    )
 
     @classmethod
     def poll(cls, context: bpy.types.Context):
         return context.area.type == 'NODE_EDITOR' and context.region.type == 'WINDOW'
 
-    def draw(self, context):
+    def draw(self, context: bpy.types.Context):
         prefs_ = prefs.get_preferences(context)
         layout = self.layout
         if not context.area.ui_type.endswith("NodeTree"):
             layout.label(text="Node search only works in node editors", icon='ERROR')
             return
 
-        # TODO: use regexes option
-        layout.prop(prefs_, "search")
+        row = layout.row()
+        row.scale_y = 1.2
+        row.prop(
+            self,
+            "search",
+            text="",
+            placeholder=self._get_search_placeholder(prefs_),
+            icon='VIEWZOOM',
+        )
         layout.separator()
 
-        layout.prop(prefs_, "search_in_name")
-        layout.prop(prefs_, "search_in_label")
-        layout.prop(prefs_, "search_in_blidname")
+        col = layout.column(align=True)
+        col.prop(prefs_, "search_in_name")
+        col.prop(prefs_, "search_in_label")
+        col.prop(prefs_, "search_in_blidname")
 
         layout.prop(prefs_, "search_in_node_groups")
 
+        col = layout.column(align=True)
         if context.area.ui_type == 'GeometryNodeTree':
-            layout.prop(prefs_, "filter_by_attribute")
+            col.prop(prefs_, "filter_by_attribute")
             if prefs_.filter_by_attribute:
-                layout.prop(prefs_, "attribute_search")
+                col.prop(prefs_, "attribute_search", text="", placeholder="Search in attributes")
 
-    def execute(self, context):
+    def execute(self, context: bpy.types.Context):
         prefs_ = prefs.get_preferences(context)
         filters_ = set()
 
-        if (prefs_.search == "" and not prefs_.filter_by_attribute) or (
+        if (self.search == "" and not prefs_.filter_by_attribute) or (
             prefs_.attribute_search == "" and prefs_.filter_by_attribute
         ):
             self.report({'WARNING'}, "No search input provided")
             return {'CANCELLED'}
 
-        if prefs_.search != "":
+        if self.search != "":
             if prefs_.search_in_name:
-                filters_.add(lambda x: node_name_filter(x, prefs_.search))
+                filters_.add(lambda x: node_name_filter(x, self.search))
             if prefs_.search_in_label:
-                filters_.add(lambda x: node_label_filter(x, prefs_.search))
+                filters_.add(lambda x: node_label_filter(x, self.search))
             if prefs_.search_in_blidname:
-                filters_.add(lambda x: node_blidname_filter(x, prefs_.search))
+                filters_.add(lambda x: node_blidname_filter(x, self.search))
 
         if prefs_.filter_by_attribute and prefs_.attribute_search != "":
             filters_.add(lambda x: attribute_filter(x, prefs_.attribute_search))
@@ -214,20 +255,35 @@ class PerformNodeSearch(bpy.types.Operator):
         # Find the node tree to search in and filter in the nodes
         return {'FINISHED'}
 
-    def invoke(self, context, event):
+    def invoke(self, context: bpy.types.Context, event: bpy.types.Event):
         # Toggle overlay by default
         if ToggleSearchOverlay.handle is None:
-            bpy.ops.node_search.toggle_overlay('INVOKE_DEFAULT')
+            bpy.ops.improved_node_search.toggle_overlay('INVOKE_DEFAULT')
 
         return context.window_manager.invoke_props_dialog(self)
+
+    def _get_search_placeholder(self, prefs_: prefs.Preferences) -> str:
+        opts = []
+        if prefs_.search_in_name:
+            opts.append("Name")
+        if prefs_.search_in_label:
+            opts.append("Label")
+        if prefs_.search_in_blidname:
+            opts.append("Node Type")
+
+        if len(opts) > 0:
+            return f"Search in {', '.join(opts)}"
+        else:
+            return "Select something to search in"
 
 
 CLASSES.append(PerformNodeSearch)
 
 
 class ClearSearch(bpy.types.Operator):
-    bl_idname = "node_search.clear"
+    bl_idname = "improved_node_search.clear"
     bl_label = "Clear Search"
+    bl_description = "Clear the search results"
 
     def execute(self, context: bpy.types.Context):
         FOUND_NODES.clear()
@@ -238,8 +294,9 @@ CLASSES.append(ClearSearch)
 
 
 class SelectFoundNodes(bpy.types.Operator):
-    bl_idname = "node_search.select_found"
+    bl_idname = "improved_node_search.select_found"
     bl_label = "Select Found Nodes"
+    bl_description = "Select all found nodes"
 
     def execute(self, context: bpy.types.Context):
         bpy.ops.node.select_all(action='DESELECT')
@@ -252,16 +309,21 @@ CLASSES.append(SelectFoundNodes)
 
 
 class CycleFoundNodes(bpy.types.Operator):
-    bl_idname = "node_search.cycle_found"
+    bl_idname = "improved_node_search.cycle_found"
     bl_label = "Cycle Found Nodes"
+    bl_description = "Go to the next or previous found node"
 
     direction: bpy.props.IntProperty(default=1, min=-1, max=1)
 
     index = 0
 
+    @classmethod
+    def poll(cls, context: bpy.types.Context) -> bool:
+        return len(FOUND_NODES) > 0
+
     def execute(self, context: bpy.types.Context):
-        if len(FOUND_NODES) == 0:
-            return {'FINISHED'}
+        # asserted by poll
+        assert len(FOUND_NODES) > 0
 
         new_index = CycleFoundNodes.index + self.direction
         # clamp next_index to boundaries of FOUND_NODES
@@ -274,8 +336,6 @@ class CycleFoundNodes(bpy.types.Operator):
         node = sorted(list(FOUND_NODES), key=lambda x: x.name)[new_index]
         print(f"Trying to select {node.name}")
 
-        # Context override doesn't work for some reason here
-        # TODO: Store and restore selection here
         bpy.ops.node.select_all(action='DESELECT')
         node.select = True
         bpy.ops.node.view_selected()
@@ -288,24 +348,28 @@ class CycleFoundNodes(bpy.types.Operator):
 CLASSES.append(CycleFoundNodes)
 
 
-class ImprovedNodeSearchPanel(bpy.types.Panel):
+class ImprovedNodeSearchMixin:
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
     bl_category = "Tool"
+
+
+class ImprovedNodeSearchPanel(bpy.types.Panel, ImprovedNodeSearchMixin):
     bl_label = "Improved Search"
     bl_idname = "NODE_EDITOR_PT_Improved_Search"
 
     def draw_header(self, context: bpy.types.Context) -> None:
         self.layout.label(text="", icon='VIEWZOOM')
 
-    def draw(self, context):
-        prefs_ = prefs.get_preferences(context)
+    def draw(self, context: bpy.types.Context) -> None:
         layout = self.layout
-        layout.operator(PerformNodeSearch.bl_idname, text="Search", icon='VIEWZOOM')
-        layout.operator(
+        row = layout.row(align=True)
+        row.scale_y = 1.5
+        row.operator(PerformNodeSearch.bl_idname, text="Search", icon='VIEWZOOM')
+        row.operator(
             ToggleSearchOverlay.bl_idname,
             depress=ToggleSearchOverlay.handle is not None,
-            text="Overlay",
+            text="",
             icon='OUTLINER_DATA_LIGHT',
         )
 
@@ -314,26 +378,46 @@ class ImprovedNodeSearchPanel(bpy.types.Panel):
             row.label(text=f"Found {len(FOUND_NODES)} node(s)")
             row.operator(ClearSearch.bl_idname, icon='PANEL_CLOSE', text="")
             layout.separator()
-            row = layout.row()
-            row.operator(SelectFoundNodes.bl_idname, text="Select")
-            row.operator(CycleFoundNodes.bl_idname, text="Prev").direction = -1
-            row.operator(CycleFoundNodes.bl_idname, text="Next").direction = 1
+            layout.operator(
+                SelectFoundNodes.bl_idname, text="Select Found", icon='RESTRICT_SELECT_OFF'
+            )
+            row = layout.row(align=True)
+            row.operator(CycleFoundNodes.bl_idname, text="Previous", icon='TRIA_LEFT').direction = (
+                -1
+            )
+            row.operator(CycleFoundNodes.bl_idname, text="Next", icon='TRIA_RIGHT').direction = 1
 
-        layout.prop(prefs_, "highlight_color")
-        layout.prop(prefs_, "border_attenuation", slider=True)
-        layout.prop(prefs_, "border_size")
-        layout.prop(prefs_, "text_size")
+        # Useful for debugging
+        if False:
+            col = layout.column(align=True)
+            for node in FOUND_NODES:
+                col.label(text=node.name)
+                col.label(text=node.bl_idname)
+                col.separator()
 
-        col = layout.column(align=True)
-        for node in FOUND_NODES:
-            col.label(text=node.name)
-            col.label(text=node.bl_idname)
-            col.separator()
-
-        col = layout.column(align=True)
-        for node_tree, value in NODE_TREE_OCCURRENCES.items():
-            col.label(text=node_tree.name)
-            col.label(text=str(value))
+            col = layout.column(align=True)
+            for node_tree, value in NODE_TREE_OCCURRENCES.items():
+                col.label(text=node_tree.name)
+                col.label(text=str(value))
 
 
 CLASSES.append(ImprovedNodeSearchPanel)
+
+
+class ImprovedNodeSearchCustomizeDisplayPanel(bpy.types.Panel, ImprovedNodeSearchMixin):
+    bl_label = "Display"
+    bl_idname = "NODE_EDITOR_PT_Improved_Search_Customize_Display"
+    bl_parent_id = ImprovedNodeSearchPanel.bl_idname
+
+    def draw(self, context: bpy.types.Context) -> None:
+        prefs_ = prefs.get_preferences(context)
+        layout = self.layout
+        layout.prop(prefs_, "highlight_color", text="")
+        layout.prop(prefs_, "text_size")
+
+        col = layout.column(align=True)
+        col.prop(prefs_, "border_attenuation", slider=True)
+        col.prop(prefs_, "border_size")
+
+
+CLASSES.append(ImprovedNodeSearchCustomizeDisplayPanel)
