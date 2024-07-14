@@ -5,9 +5,9 @@ BUILDS_FOLDER="builds"
 
 if [ -d "${BUILDS_FOLDER}/node_search" ]; then
     rm -rf "${BUILDS_FOLDER}/node_search"
-else
-    mkdir -p "${BUILDS_FOLDER}/node_search"
 fi
+
+mkdir -p "${BUILDS_FOLDER}/node_search"
 
 # copy addon source files, remove pycache
 cp -r *.py ${BUILDS_FOLDER}/node_search
