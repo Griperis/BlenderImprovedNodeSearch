@@ -59,11 +59,27 @@ class Preferences(bpy.types.AddonPreferences):
         description="If toggled, then what is in \"Search\" will be searched in node \"Node Type\" (.bl_idname)",
         default=False,
     )
-
     search_in_node_groups: bpy.props.BoolProperty(
         name="Search in Node Groups",
         description="If toggled, then we will search also the inside of node groups in current node tree",
         default=True,
+    )
+
+    # Search for errors
+    search_unconnected: bpy.props.BoolProperty(
+        name="Search Disconnected Nodes",
+        description="If toggled, the search will include nodes that are not connected to anything",
+        default=False,
+    )
+    search_missing_images: bpy.props.BoolProperty(
+        name="Search Missing Image Nodes",
+        description="If toggled, the search will include nodes that have missing images",
+        default=False,
+    )
+    search_missing_node_groups: bpy.props.BoolProperty(
+        name="Search Missing Node Groups",
+        description="If toggled, the search will include nodes that have missing node groups",
+        default=False,
     )
 
     filter_by_attribute: bpy.props.BoolProperty(

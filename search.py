@@ -1,6 +1,7 @@
 # copyright (c) Zdenek Dolezal 2024-*
 
 import bpy
+import os
 import re
 import typing
 from . import prefs
@@ -55,7 +56,7 @@ class NodeSearch:
             return self.processed_node_trees[node_tree]
 
         for node in node_tree.nodes:
-            if hasattr(node, "node_tree"):
+            if hasattr(node, "node_tree") and node.node_tree is not None:
                 if self.search_in_node_groups:
                     found_nodes = self._search_and_recurse(node.node_tree, depth + 1)
                     ret.update(found_nodes)
@@ -94,9 +95,7 @@ def node_label_filter(node: bpy.types.Node, value: str, is_regex: bool = False) 
     return value.lower() in node.label.lower()
 
 
-def attribute_filter(node: bpy.types.GeometryNode, name: str, is_regex: bool = False) -> bool:
-    # TODO: attribute is currently a second field, lets see how it is used before implementing
-    # regex into it.
+def attribute_filter(node: bpy.types.GeometryNode, name: str) -> bool:
     if (
         isinstance(
             node,
@@ -120,6 +119,29 @@ def attribute_filter(node: bpy.types.GeometryNode, name: str, is_regex: bool = F
     elif isinstance(node, bpy.types.GeometryNodeRemoveAttribute):
         return node.inputs[1].default_value.lower() == searched_name
     return False
+
+
+def unconnected_node_filter(node: bpy.types.Node) -> bool:
+    return len(node.outputs) > 0 and sum(output.is_linked for output in node.outputs) == 0
+
+
+def missing_image_filter(node: bpy.types.Node) -> bool:
+    if not hasattr(node, "image"):
+        return False
+
+    if node.image is None:
+        return True
+
+    image = typing.cast(bpy.types.Image, node.image)
+    path = os.path.abspath(bpy.path.abspath(image.filepath))
+    return not os.path.isfile(path)
+
+
+def missing_node_group_filter(node: bpy.types.Node) -> bool:
+    if not hasattr(node, "node_tree"):
+        return False
+
+    return node.node_tree is None
 
 
 class ToggleSearchOverlay(bpy.types.Operator):
@@ -230,6 +252,11 @@ class PerformNodeSearch(bpy.types.Operator):
         layout.prop(prefs_, "search_in_node_groups")
 
         col = layout.column(align=True)
+        col.prop(prefs_, "search_unconnected")
+        col.prop(prefs_, "search_missing_images")
+        col.prop(prefs_, "search_missing_node_groups")
+
+        col = layout.column(align=True)
         if context.area.ui_type == 'GeometryNodeTree':
             col.prop(prefs_, "filter_by_attribute")
             if prefs_.filter_by_attribute:
@@ -239,9 +266,7 @@ class PerformNodeSearch(bpy.types.Operator):
         prefs_ = prefs.get_preferences(context)
         filters_ = set()
 
-        if (self.search == "" and not prefs_.filter_by_attribute) or (
-            prefs_.attribute_search == "" and prefs_.filter_by_attribute
-        ):
+        if self._is_search_required(prefs_) and self.search == "":
             self.report({'WARNING'}, "No search input provided, provide search input")
             return {'CANCELLED'}
 
@@ -249,6 +274,7 @@ class PerformNodeSearch(bpy.types.Operator):
             self.report({'ERROR'}, f"Provided regular expression is not valid")
             return {'CANCELLED'}
 
+        # TODO: This will need changing
         if self.search != "":
             if prefs_.search_in_name:
                 filters_.add(lambda x: node_name_filter(x, self.search, prefs_.use_regex))
@@ -259,6 +285,13 @@ class PerformNodeSearch(bpy.types.Operator):
 
         if prefs_.filter_by_attribute and prefs_.attribute_search != "":
             filters_.add(lambda x: attribute_filter(x, prefs_.attribute_search))
+
+        if prefs_.search_unconnected:
+            filters_.add(lambda x: unconnected_node_filter(x))
+        if prefs_.search_missing_images:
+            filters_.add(lambda x: missing_image_filter(x))
+        if prefs_.search_missing_node_groups:
+            filters_.add(lambda x: missing_node_group_filter(x))
 
         node_tree = context.space_data.edit_tree
         FOUND_NODES.clear()
@@ -298,6 +331,15 @@ class PerformNodeSearch(bpy.types.Operator):
             return f"Search in {', '.join(opts)}"
         else:
             return "Select something to search in"
+
+    def _is_search_required(self, prefs_: prefs.Preferences) -> bool:
+        return any(
+            (
+                prefs_.search_in_name,
+                prefs_.search_in_label,
+                prefs_.search_in_blidname,
+            )
+        )
 
 
 CLASSES.append(PerformNodeSearch)
