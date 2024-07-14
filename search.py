@@ -56,6 +56,10 @@ class NodeSearch:
             return self.processed_node_trees[node_tree]
 
         for node in node_tree.nodes:
+            # Frames are not considered in the search currently
+            if isinstance(node, bpy.types.NodeFrame):
+                continue
+
             if hasattr(node, "node_tree") and node.node_tree is not None:
                 if self.search_in_node_groups:
                     found_nodes = self._search_and_recurse(node.node_tree, depth + 1)
