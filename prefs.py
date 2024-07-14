@@ -7,6 +7,11 @@ import typing
 class Preferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
+    use_regex: bpy.props.BoolProperty(
+        name="Use Regular Expressions",
+        description="If toggled, then the search will be done using regular expressions",
+    )
+
     highlight_color: bpy.props.FloatVectorProperty(
         name="Highlight Color",
         description="Highlight color of the found nodes overlay",

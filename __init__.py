@@ -23,7 +23,7 @@ from . import prefs
 
 CLASSES = [
     prefs.Preferences,
-] + search.CLASSES
+]
 
 
 KEYMAPS = []
@@ -31,6 +31,8 @@ KEYMAPS = []
 
 def register():
     KEYMAPS.clear()
+
+    search.register()
 
     for cls in CLASSES:
         bpy.utils.register_class(cls)
@@ -47,6 +49,8 @@ def register():
 def unregister():
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)
+
+    search.unregister()
 
     if search.ToggleSearchOverlay.handle is not None:
         search.ToggleSearchOverlay.remove_draw_handler()

@@ -1,0 +1,17 @@
+schema_version = "1.0.0"
+
+id = "improved_node_search"
+version = "1.0.0"
+name = "Improved Node Search"
+tagline = "Navigate your node tree faster via more node search options"
+maintainer = "Zdenek Dolezal <Griperis@outlook.cz>"
+type = "add-on"
+website = "https://github.com/Griperis/BlenderImprovedNodeSearch"
+tags = ["Node", "User Interface"]
+blender_version_min = "4.2.0"
+license = [
+  "SPDX:GPL-2.0-or-later",
+]
+copyright = [
+  "2024-* Zdenek Dolezal",
+]

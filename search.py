@@ -1,6 +1,7 @@
 # copyright (c) Zdenek Dolezal 2024-*
 
 import bpy
+import re
 import typing
 from . import prefs
 from . import draw
@@ -12,8 +13,12 @@ FOUND_NODES = set()
 # Mapping of node tree -> number of occurrences in last search
 NODE_TREE_OCCURRENCES = {}
 
+# Pattern related values, when using regexp variant of search
+PATTERN = re.Pattern | None
+PATTERN_COMPILE_ERROR: str | None = None
 
-FilterType = typing.Callable[[bpy.types.Node, str], bool]
+
+FilterType = typing.Callable[[bpy.types.Node, str, bool], bool]
 
 
 class NodeSearch:
@@ -69,19 +74,29 @@ class NodeSearch:
         return ret
 
 
-def node_name_filter(node: bpy.types.Node, name: str) -> bool:
+def node_name_filter(node: bpy.types.Node, name: str, is_regex: bool = False) -> bool:
+    if is_regex:
+        return PATTERN.match(node.name) is not None
+
     return name.lower() in node.name.lower()
 
 
-def node_blidname_filter(node: bpy.types.Node, value: str) -> bool:
+def node_blidname_filter(node: bpy.types.Node, value: str, is_regex: bool = False) -> bool:
+    if is_regex:
+        return PATTERN.match(node.bl_idname) is not None
     return value.lower() in node.bl_idname.lower()
 
 
-def node_label_filter(node: bpy.types.Node, value: str) -> bool:
+def node_label_filter(node: bpy.types.Node, value: str, is_regex: bool = False) -> bool:
+    if is_regex:
+        return PATTERN.match(node.label) is not None
+
     return value.lower() in node.label.lower()
 
 
-def attribute_filter(node: bpy.types.GeometryNode, name: str) -> bool:
+def attribute_filter(node: bpy.types.GeometryNode, name: str, is_regex: bool = False) -> bool:
+    # TODO: attribute is currently a second field, lets see how it is used before implementing
+    # regex into it.
     if (
         isinstance(
             node,
@@ -105,28 +120,6 @@ def attribute_filter(node: bpy.types.GeometryNode, name: str) -> bool:
     elif isinstance(node, bpy.types.GeometryNodeRemoveAttribute):
         return node.inputs[1].default_value.lower() == searched_name
     return False
-
-
-def ensure_search_result_valid():
-    # TODO: Improve this, this crashes Blender, we need to be sure that we don't highlight and keep
-    # references to nodes, that do not longer exist in the node tree.
-    # Try except ReferenceError..., we have to do this at the right time
-    if ToggleSearchOverlay.node_tree is None:
-        return
-
-    for node in list(FOUND_NODES):
-        if node.name not in ToggleSearchOverlay.node_tree.nodes:
-            FOUND_NODES.remove(node)
-            print(f"Removing {node.name} from found nodes as it is no longer valid")
-            if (
-                hasattr(node, "node_tree")
-                and node.node_tree is not None
-                and node.node_tree in NODE_TREE_OCCURRENCES
-            ):
-                del NODE_TREE_OCCURRENCES[node.node_tree]
-                print(
-                    f"Removing {node.node_tree.name} from node tree occurrences as it is no longer valid"
-                )
 
 
 class ToggleSearchOverlay(bpy.types.Operator):
@@ -155,8 +148,6 @@ class ToggleSearchOverlay(bpy.types.Operator):
         if context.area:
             context.area.tag_redraw()
 
-        # TODO: This crashes Blender
-        # ensure_search_result_valid()
         return {'PASS_THROUGH'}
 
     def invoke(self, context, event):
@@ -172,6 +163,21 @@ class ToggleSearchOverlay(bpy.types.Operator):
 CLASSES.append(ToggleSearchOverlay)
 
 
+def _search_updated(op: bpy.types.OperatorProperties, context: bpy.types.Context) -> None:
+    global PATTERN
+    global PATTERN_COMPILE_ERROR
+
+    PATTERN = None
+    PATTERN_COMPILE_ERROR = None
+    # We treat the search always as a pattern, only show the error and use the pattern if
+    # the user wants to use regex.
+    try:
+        PATTERN = re.compile(op.search)
+    except re.error as e:
+        print(f"Error compiling pattern: {e}")
+        PATTERN_COMPILE_ERROR = str(e)
+
+
 class PerformNodeSearch(bpy.types.Operator):
     bl_idname = "improved_node_search.search"
     bl_label = "Search"
@@ -179,7 +185,9 @@ class PerformNodeSearch(bpy.types.Operator):
     bl_property = "search"
 
     search: bpy.props.StringProperty(
-        name="Search", description="Text to search for based on other options"
+        name="Search",
+        description="Text to search for based on other options",
+        update=_search_updated,
     )
 
     @classmethod
@@ -193,8 +201,10 @@ class PerformNodeSearch(bpy.types.Operator):
             layout.label(text="Node search only works in node editors", icon='ERROR')
             return
 
-        row = layout.row()
+        is_regex_error = prefs_.use_regex and PATTERN_COMPILE_ERROR is not None
+        row = layout.row(align=True)
         row.scale_y = 1.2
+        row.alert = is_regex_error
         row.prop(
             self,
             "search",
@@ -202,7 +212,15 @@ class PerformNodeSearch(bpy.types.Operator):
             placeholder=self._get_search_placeholder(prefs_),
             icon='VIEWZOOM',
         )
-        layout.separator()
+        # Create another row for the aligned icon, just so we can toggle the alert=False
+        row = row.row(align=True)
+        row.alert = False
+        row.prop(prefs_, "use_regex", icon='SORTBYEXT', text="")
+
+        if prefs_.use_regex and is_regex_error:
+            row = layout.row()
+            row.alert = True
+            row.label(text=f"Error: {PATTERN_COMPILE_ERROR}", icon='ERROR')
 
         col = layout.column(align=True)
         col.prop(prefs_, "search_in_name")
@@ -224,16 +242,20 @@ class PerformNodeSearch(bpy.types.Operator):
         if (self.search == "" and not prefs_.filter_by_attribute) or (
             prefs_.attribute_search == "" and prefs_.filter_by_attribute
         ):
-            self.report({'WARNING'}, "No search input provided")
+            self.report({'WARNING'}, "No search input provided, provide search input")
+            return {'CANCELLED'}
+
+        if prefs_.use_regex and PATTERN is None and PATTERN_COMPILE_ERROR is not None:
+            self.report({'ERROR'}, f"Provided regular expression is not valid")
             return {'CANCELLED'}
 
         if self.search != "":
             if prefs_.search_in_name:
-                filters_.add(lambda x: node_name_filter(x, self.search))
+                filters_.add(lambda x: node_name_filter(x, self.search, prefs_.use_regex))
             if prefs_.search_in_label:
-                filters_.add(lambda x: node_label_filter(x, self.search))
+                filters_.add(lambda x: node_label_filter(x, self.search, prefs_.use_regex))
             if prefs_.search_in_blidname:
-                filters_.add(lambda x: node_blidname_filter(x, self.search))
+                filters_.add(lambda x: node_blidname_filter(x, self.search, prefs_.use_regex))
 
         if prefs_.filter_by_attribute and prefs_.attribute_search != "":
             filters_.add(lambda x: attribute_filter(x, prefs_.attribute_search))
@@ -243,6 +265,7 @@ class PerformNodeSearch(bpy.types.Operator):
         NODE_TREE_OCCURRENCES.clear()
         node_search = NodeSearch(node_tree, filters_, prefs_.search_in_node_groups)
         found_nodes = node_search.search()
+        # Set the overlay's node tree to the current one
         ToggleSearchOverlay.node_tree = node_tree
         FOUND_NODES.update(found_nodes)
         NODE_TREE_OCCURRENCES.update(node_search.nested_node_tree_finds)
@@ -421,3 +444,33 @@ class ImprovedNodeSearchCustomizeDisplayPanel(bpy.types.Panel, ImprovedNodeSearc
 
 
 CLASSES.append(ImprovedNodeSearchCustomizeDisplayPanel)
+
+
+@bpy.app.handlers.persistent
+def _depsgraph_update_pre(scene: bpy.types.Scene):
+    if ToggleSearchOverlay.node_tree is None:
+        return
+
+    for node in list(FOUND_NODES):
+        if node.name not in ToggleSearchOverlay.node_tree.nodes:
+            FOUND_NODES.remove(node)
+            if (
+                hasattr(node, "node_tree")
+                and node.node_tree is not None
+                and node.node_tree in NODE_TREE_OCCURRENCES
+            ):
+                del NODE_TREE_OCCURRENCES[node.node_tree]
+
+
+def register():
+    for cls in CLASSES:
+        bpy.utils.register_class(cls)
+
+    bpy.app.handlers.depsgraph_update_pre.append(_depsgraph_update_pre)
+
+
+def unregister():
+    bpy.app.handlers.depsgraph_update_pre.remove(_depsgraph_update_pre)
+
+    for cls in reversed(CLASSES):
+        bpy.utils.unregister_class(cls)
