@@ -79,27 +79,30 @@ class NodeSearch:
         return ret
 
 
-def node_name_filter(node: bpy.types.Node, name: str, is_regex: bool = False) -> bool:
-    if is_regex:
-        return PATTERN.match(node.name) is not None
+def search_string(
+    search: str, value: str, prefs: prefs.Preferences, enable_regex: bool = True
+) -> str:
+    if enable_regex and prefs.use_regex:
+        return PATTERN.match(value) is not None
 
-    return name.lower() in node.name.lower()
-
-
-def node_blidname_filter(node: bpy.types.Node, value: str, is_regex: bool = False) -> bool:
-    if is_regex:
-        return PATTERN.match(node.bl_idname) is not None
-    return value.lower() in node.bl_idname.lower()
+    if prefs.match_case:
+        return search in value
+    return search.lower() in value.lower()
 
 
-def node_label_filter(node: bpy.types.Node, value: str, is_regex: bool = False) -> bool:
-    if is_regex:
-        return PATTERN.match(node.label) is not None
-
-    return value.lower() in node.label.lower()
+def node_name_filter(node: bpy.types.Node, name: str, prefs: prefs.Preferences) -> bool:
+    return search_string(name, node.name, prefs)
 
 
-def attribute_filter(node: bpy.types.GeometryNode, name: str) -> bool:
+def node_blidname_filter(node: bpy.types.Node, value: str, prefs: prefs.Preferences) -> bool:
+    return search_string(value, node.bl_idname, prefs)
+
+
+def node_label_filter(node: bpy.types.Node, value: str, prefs: prefs.Preferences) -> bool:
+    return search_string(value, node.label, prefs)
+
+
+def attribute_filter(node: bpy.types.GeometryNode, name: str, prefs: prefs.Preferences) -> bool:
     if (
         isinstance(
             node,
@@ -115,14 +118,14 @@ def attribute_filter(node: bpy.types.GeometryNode, name: str) -> bool:
 
     # TODO: Finding if the node.inputs[x] is connected to other node or not
     # and use the value from there would be a improvement.
-    searched_name = name.lower()
+    searched_input = None
     if isinstance(node, bpy.types.GeometryNodeInputNamedAttribute):
-        return node.inputs[0].default_value.lower() == searched_name
+        searched_input = node.inputs[0].default_value
     elif isinstance(node, bpy.types.GeometryNodeStoreNamedAttribute):
-        return node.inputs[2].default_value.lower() == searched_name
+        searched_input = node.inputs[2].default_value
     elif isinstance(node, bpy.types.GeometryNodeRemoveAttribute):
-        return node.inputs[1].default_value.lower() == searched_name
-    return False
+        searched_input = node.inputs[1].default_value
+    return search_string(name, searched_input, prefs, enable_regex=False)
 
 
 def unconnected_node_filter(node: bpy.types.Node) -> bool:
@@ -242,6 +245,7 @@ class PerformNodeSearch(bpy.types.Operator):
         row = row.row(align=True)
         row.alert = False
         row.prop(prefs_, "use_regex", icon='SORTBYEXT', text="")
+        row.prop(prefs_, "match_case", icon='SORTALPHA', text="")
 
         if prefs_.use_regex and is_regex_error:
             row = layout.row()
@@ -278,17 +282,16 @@ class PerformNodeSearch(bpy.types.Operator):
             self.report({'ERROR'}, f"Provided regular expression is not valid")
             return {'CANCELLED'}
 
-        # TODO: This will need changing
         if self.search != "":
             if prefs_.search_in_name:
-                filters_.add(lambda x: node_name_filter(x, self.search, prefs_.use_regex))
+                filters_.add(lambda x: node_name_filter(x, self.search, prefs_))
             if prefs_.search_in_label:
-                filters_.add(lambda x: node_label_filter(x, self.search, prefs_.use_regex))
+                filters_.add(lambda x: node_label_filter(x, self.search, prefs_))
             if prefs_.search_in_blidname:
-                filters_.add(lambda x: node_blidname_filter(x, self.search, prefs_.use_regex))
+                filters_.add(lambda x: node_blidname_filter(x, self.search, prefs_))
 
         if prefs_.filter_by_attribute and prefs_.attribute_search != "":
-            filters_.add(lambda x: attribute_filter(x, prefs_.attribute_search))
+            filters_.add(lambda x: attribute_filter(x, prefs_.attribute_search, prefs_))
 
         if prefs_.search_unconnected:
             filters_.add(lambda x: unconnected_node_filter(x))
