@@ -301,6 +301,9 @@ class PerformNodeSearch(bpy.types.Operator):
             if prefs_.filter_by_attribute:
                 col.prop(prefs_, "attribute_search", text="", placeholder="Search in attributes")
 
+        if len(NODE_TREE_NODES) > 0:
+            layout.operator(ClearSearch.bl_idname, icon='PANEL_CLOSE', text="Clear Previous Search")
+
     def execute(self, context: bpy.types.Context):
         prefs_ = prefs.get_preferences(context)
         filters_ = set()
