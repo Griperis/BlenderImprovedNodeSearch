@@ -4,14 +4,16 @@ import bpy
 import os
 import re
 import typing
+import collections
+import itertools
 from . import prefs
 from . import draw
 
 
 CLASSES = []
-# Set of found nodes for last search
-FOUND_NODES = set()
 # Mapping of node tree -> number of occurrences in last search
+NODE_TREE_NODES = {}
+# Mapping of found nodes to number of occurances of searched nodes
 NODE_TREE_OCCURRENCES = {}
 
 # Pattern related values, when using regexp variant of search
@@ -32,51 +34,82 @@ class NodeSearch:
         self.node_tree = node_tree
         self.filters = filters
         self.search_in_node_groups = search_in_node_groups
-        self.processed_node_trees = {}
-        self.nested_node_tree_finds = {}
+        self.node_tree_finds: dict[bpy.types.NodeTree, bpy.types.Node] = {}
+        self.node_tree_leaf_nodes_count: dict[bpy.types.NodeTree, int] = collections.defaultdict(
+            int
+        )
+        self.all_found_nodes: set[bpy.types.Node] = set()
 
     def search(self) -> set[bpy.types.Node]:
-        """Searched the node tree, while counting the nested node tree finds.
-
-        Returns top level nodes that match the filters.
-        """
-        ret = set()
-        all_found_nodes = self._search_and_recurse(self.node_tree)
-        for node in self.node_tree.nodes:
-            if node in all_found_nodes:
-                ret.add(node)
-
-        return ret
+        self._search_and_recurse(self.node_tree)
+        self.node_tree_leaf_nodes_count[self.node_tree] = self._leaf_nodes_count(self.node_tree)
+        return self.all_found_nodes
 
     def _search_and_recurse(
         self, node_tree: bpy.types.NodeTree, depth: int = 0
     ) -> set[bpy.types.Node]:
-        ret = set()
-        if node_tree in self.processed_node_trees:
-            return self.processed_node_trees[node_tree]
+        if node_tree in self.node_tree_finds:
+            return self.node_tree_finds[node_tree]
+        else:
+            self.node_tree_finds[node_tree] = set()
 
         for node in node_tree.nodes:
             # Frames are not considered in the search currently
             if isinstance(node, bpy.types.NodeFrame):
                 continue
 
-            if hasattr(node, "node_tree") and node.node_tree is not None:
-                if self.search_in_node_groups:
-                    found_nodes = self._search_and_recurse(node.node_tree, depth + 1)
-                    ret.update(found_nodes)
-                    if len(found_nodes) > 0:
-                        if depth == 0:
-                            self.nested_node_tree_finds[node.node_tree] = len(found_nodes)
-                            ret.add(node)
-                    self.processed_node_trees[node_tree] = found_nodes
+            if (
+                hasattr(node, "node_tree")
+                and node.node_tree is not None
+                and self.search_in_node_groups
+            ):
+                self._search_and_recurse(node.node_tree, depth + 1)
+                # If any nodes are found inside the node group, we add the node group to the result
+                if len(self.node_tree_finds[node.node_tree]) > 0:
+                    self.node_tree_finds[node_tree].add(node)
 
             # If any filter returns True for given node, we consider it in the result
             for filter_ in self.filters:
                 if filter_(node):
-                    ret.add(node)
+                    self.all_found_nodes.add(node)
+                    self.node_tree_finds[node_tree].add(node)
                     break
 
-        return ret
+        return self.all_found_nodes
+
+    def _leaf_nodes_count(self, node_tree: bpy.types.NodeTree) -> int:
+        if node_tree in self.node_tree_leaf_nodes_count:
+            return self.node_tree_leaf_nodes_count[node_tree]
+
+        for node in node_tree.nodes:
+            if node not in self.node_tree_finds[node_tree]:
+                continue
+
+            if hasattr(node, "node_tree") and node.node_tree is not None:
+                self.node_tree_leaf_nodes_count[node_tree] = self._leaf_nodes_count(node.node_tree)
+            else:
+                self.node_tree_leaf_nodes_count[node_tree] += 1
+
+        return self.node_tree_leaf_nodes_count[node_tree]
+
+
+def get_context_found_nodes(context: bpy.types.Context) -> set[bpy.types.Node]:
+    """Returns found nodes based on the current context."""
+    if not hasattr(context.space_data, "edit_tree"):
+        return set()
+
+    return NODE_TREE_NODES.get(context.space_data.edit_tree, set())
+
+
+def get_all_found_nodes(include_nodegroups: bool = False) -> set[bpy.types.Node]:
+    ret = set()
+    for node in itertools.chain(*NODE_TREE_NODES.values()):
+        if not include_nodegroups and hasattr(node, "node_tree"):
+            continue
+
+        ret.add(node)
+
+    return ret
 
 
 def search_string(
@@ -157,13 +190,11 @@ class ToggleSearchOverlay(bpy.types.Operator):
     bl_description = "Toggle the visual display of the search results"
 
     handle = None
-    # Node tree reference to draw only in the right context
-    node_tree: bpy.types.NodeTree | None = None
 
     def add_draw_handler(self, context: bpy.types.Context):
         ToggleSearchOverlay.handle = bpy.types.SpaceNodeEditor.draw_handler_add(
             draw.highlight_nodes,
-            (self, context, FOUND_NODES, NODE_TREE_OCCURRENCES),
+            (context, NODE_TREE_NODES, NODE_TREE_OCCURRENCES),
             'WINDOW',
             'POST_PIXEL',
         )
@@ -301,14 +332,13 @@ class PerformNodeSearch(bpy.types.Operator):
             filters_.add(lambda x: missing_node_group_filter(x))
 
         node_tree = context.space_data.edit_tree
-        FOUND_NODES.clear()
+        NODE_TREE_NODES.clear()
         NODE_TREE_OCCURRENCES.clear()
         node_search = NodeSearch(node_tree, filters_, prefs_.search_in_node_groups)
         found_nodes = node_search.search()
         # Set the overlay's node tree to the current one
-        ToggleSearchOverlay.node_tree = node_tree
-        FOUND_NODES.update(found_nodes)
-        NODE_TREE_OCCURRENCES.update(node_search.nested_node_tree_finds)
+        NODE_TREE_NODES.update(node_search.node_tree_finds)
+        NODE_TREE_OCCURRENCES.update(node_search.node_tree_leaf_nodes_count)
 
         if len(found_nodes) > 0:
             self.report({'INFO'}, f"Found {len(found_nodes)} node(s)")
@@ -358,7 +388,8 @@ class ClearSearch(bpy.types.Operator):
     bl_description = "Clear the search results"
 
     def execute(self, context: bpy.types.Context):
-        FOUND_NODES.clear()
+        NODE_TREE_NODES.clear()
+        NODE_TREE_OCCURRENCES.clear()
         return {'FINISHED'}
 
 
@@ -370,9 +401,13 @@ class SelectFoundNodes(bpy.types.Operator):
     bl_label = "Select Found Nodes"
     bl_description = "Select all found nodes"
 
+    @classmethod
+    def poll(cls, context: bpy.types.Context) -> bool:
+        return hasattr(context.space_data, "node_tree")
+
     def execute(self, context: bpy.types.Context):
         bpy.ops.node.select_all(action='DESELECT')
-        for node in FOUND_NODES:
+        for node in get_context_found_nodes(context):
             node.select = True
         return {'FINISHED'}
 
@@ -391,22 +426,19 @@ class CycleFoundNodes(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context: bpy.types.Context) -> bool:
-        return len(FOUND_NODES) > 0
+        return len(get_context_found_nodes(context)) > 0
 
     def execute(self, context: bpy.types.Context):
-        # asserted by poll
-        assert len(FOUND_NODES) > 0
-
         new_index = CycleFoundNodes.index + self.direction
+        found_nodes = get_context_found_nodes(context)
         # clamp next_index to boundaries of FOUND_NODES
-        if new_index > len(FOUND_NODES) - 1:
+        if new_index > len(found_nodes) - 1:
             new_index = 0
         elif new_index < 0:
-            new_index = len(FOUND_NODES) - 1
+            new_index = len(found_nodes) - 1
 
         # We sort the found nodes by name, as set is unordered
-        node = sorted(list(FOUND_NODES), key=lambda x: x.name)[new_index]
-        print(f"Trying to select {node.name}")
+        node = sorted(list(found_nodes), key=lambda x: x.name)[new_index]
 
         bpy.ops.node.select_all(action='DESELECT')
         node.select = True
@@ -445,9 +477,10 @@ class ImprovedNodeSearchPanel(bpy.types.Panel, ImprovedNodeSearchMixin):
             icon='OUTLINER_DATA_LIGHT',
         )
 
-        if len(FOUND_NODES) > 0:
+        found_nodes = get_all_found_nodes()
+        if len(found_nodes) > 0:
             row = layout.row()
-            row.label(text=f"Found {len(FOUND_NODES)} node(s)")
+            row.label(text=f"Found {len(found_nodes)} node(s)")
             row.operator(ClearSearch.bl_idname, icon='PANEL_CLOSE', text="")
             layout.separator()
             layout.operator(
@@ -461,16 +494,11 @@ class ImprovedNodeSearchPanel(bpy.types.Panel, ImprovedNodeSearchMixin):
 
         # Useful for debugging
         if False:
-            col = layout.column(align=True)
-            for node in FOUND_NODES:
-                col.label(text=node.name)
-                col.label(text=node.bl_idname)
-                col.separator()
-
-            col = layout.column(align=True)
-            for node_tree, value in NODE_TREE_OCCURRENCES.items():
+            for node_tree, nodes in NODE_TREE_NODES.items():
+                col = layout.column(align=True)
                 col.label(text=node_tree.name)
-                col.label(text=str(value))
+                for node in nodes:
+                    col.label(text=f"  {node.name}")
 
 
 CLASSES.append(ImprovedNodeSearchPanel)
@@ -497,18 +525,28 @@ CLASSES.append(ImprovedNodeSearchCustomizeDisplayPanel)
 
 @bpy.app.handlers.persistent
 def _depsgraph_update_pre(scene: bpy.types.Scene):
-    if ToggleSearchOverlay.node_tree is None:
-        return
+    for node_tree in list(NODE_TREE_NODES):
+        nodes = list(NODE_TREE_NODES[node_tree])
+        try:
+            data_node_group = bpy.data.node_groups.get(node_tree.name)
+        except ReferenceError:
+            NODE_TREE_NODES.pop(node_tree)
+            NODE_TREE_OCCURRENCES.pop(node_tree)
+            continue
 
-    for node in list(FOUND_NODES):
-        if node.name not in ToggleSearchOverlay.node_tree.nodes:
-            FOUND_NODES.remove(node)
-            if (
-                hasattr(node, "node_tree")
-                and node.node_tree is not None
-                and node.node_tree in NODE_TREE_OCCURRENCES
-            ):
-                del NODE_TREE_OCCURRENCES[node.node_tree]
+        if data_node_group is None:
+            NODE_TREE_NODES.pop(node_tree)
+            NODE_TREE_OCCURRENCES.pop(node_tree)
+            continue
+
+        for node in nodes:
+            try:
+                if node.name not in data_node_group.nodes:
+                    NODE_TREE_NODES[node_tree].remove(node)
+                    NODE_TREE_OCCURRENCES[node_tree] -= 1
+            except UnicodeDecodeError:
+                NODE_TREE_NODES[node_tree].remove(node)
+                NODE_TREE_OCCURRENCES[node_tree] -= 1
 
 
 def register():

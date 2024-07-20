@@ -222,17 +222,16 @@ def draw_text(x: float, y: float, text: str, size: float, colour: set[float, flo
 
 
 def highlight_nodes(
-    self,
     context: bpy.types.Context,
-    nodes: set[bpy.types.Node],
-    node_tree_occurrences: dict[bpy.types.NodeTree, int] | None = None,
+    node_tree_nodes: dict[bpy.types.NodeTree, list[bpy.types.Node]],
+    node_tree_occurances: dict[bpy.types.NodeTree, int],
 ) -> None:
     prefs_ = prefs.get_preferences(context)
-    if not (
-        context.area.type == 'NODE_EDITOR'
-        and context.region.type == 'WINDOW'
-        and context.space_data.edit_tree == self.node_tree
-    ):
+    if not (context.area.type == 'NODE_EDITOR' and context.region.type == 'WINDOW'):
+        return
+
+    nodes = node_tree_nodes.get(context.space_data.edit_tree, None)
+    if nodes is None:
         return
 
     prev_state = gpu.state.blend_get()
@@ -244,8 +243,8 @@ def highlight_nodes(
         # This count is going to be > 0 only for node groups that should be highlighted with
         # the number text.
         inside_node_count = 0
-        if node_tree_occurrences is not None and hasattr(node, "node_tree"):
-            inside_node_count = node_tree_occurrences.get(node.node_tree, 0)
+        if hasattr(node, "node_tree"):
+            inside_node_count = node_tree_occurances.get(node.node_tree, 0)
 
         if is_node_partially_in_view(node, context):
             x, y = get_node_location(node)
