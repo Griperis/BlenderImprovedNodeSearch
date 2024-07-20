@@ -9,7 +9,7 @@
 bl_info = {
     "name": "Improved Node Search",
     "author": "Zdenek Dolezal",
-    "version": (1, 0, 0),
+    "version": (1, 0, 2),
     "blender": (4, 2, 0),
     "location": "",
     "description": "",
