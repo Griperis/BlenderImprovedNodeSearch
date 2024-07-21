@@ -135,6 +135,12 @@ def node_label_filter(node: bpy.types.Node, value: str, prefs: prefs.Preferences
     return search_string(value, node.label, prefs)
 
 
+def node_group_name_filter(node: bpy.types.Node, value: str, prefs: prefs.Preferences) -> bool:
+    if not hasattr(node, "node_tree") or node.node_tree is None:
+        return False
+    return search_string(value, node.node_tree.name, prefs)
+
+
 def attribute_filter(node: bpy.types.GeometryNode, name: str, prefs: prefs.Preferences) -> bool:
     if (
         isinstance(
@@ -323,6 +329,8 @@ class PerformNodeSearch(bpy.types.Operator):
                 filters_.add(lambda x: node_label_filter(x, self.search, prefs_))
             if prefs_.search_in_blidname:
                 filters_.add(lambda x: node_blidname_filter(x, self.search, prefs_))
+            if prefs_.search_in_node_groups:
+                filters_.add(lambda x: node_group_name_filter(x, self.search, prefs_))
 
         if prefs_.filter_by_attribute and prefs_.attribute_search != "":
             filters_.add(lambda x: attribute_filter(x, prefs_.attribute_search, prefs_))
@@ -480,7 +488,7 @@ class ImprovedNodeSearchPanel(bpy.types.Panel, ImprovedNodeSearchMixin):
             icon='OUTLINER_DATA_LIGHT',
         )
 
-        found_nodes = get_all_found_nodes()
+        found_nodes = get_all_found_nodes(include_nodegroups=True)
         if len(found_nodes) > 0:
             row = layout.row()
             row.label(text=f"Found {len(found_nodes)} node(s)")
