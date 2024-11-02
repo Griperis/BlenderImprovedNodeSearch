@@ -15,7 +15,8 @@ cp -r blender_manifest.toml ${BUILDS_FOLDER}/node_search
 
 # change version in bl_info to match one in this file
 sed -i "s/\"version\": ([0-9], [0-9], [0-9])/\"version\": (`echo ${VERSION} | sed -e 's/\./, /g'`)/" ${BUILDS_FOLDER}/node_search/__init__.py
-
+# change version in blender_manifest to match one in this file
+sed -i "s/\bversion\b = \"[0-9]\.[0-9]\.[0-9]\"/version = \"`echo ${VERSION}`\"/" ${BUILDS_FOLDER}/node_search/blender_manifest.toml
 
 # remove old zip, zip everything
 rm -f node_search*.zip
