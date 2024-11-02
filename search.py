@@ -288,7 +288,7 @@ class PerformNodeSearch(bpy.types.Operator):
         if prefs_.use_regex and is_regex_error:
             row = layout.row()
             row.alert = True
-            row.label(text=f"Error: {PATTERN_COMPILE_ERROR}", icon='ERROR')
+            row.label(text=f"Regex Error: {PATTERN_COMPILE_ERROR}", icon='ERROR')
 
         col = layout.column(align=True)
         col.prop(prefs_, "search_in_name")
