@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION="1.0.3"
+VERSION="1.0.4"
 BUILDS_FOLDER="builds"
 
 if [ -d "${BUILDS_FOLDER}/node_search" ]; then
