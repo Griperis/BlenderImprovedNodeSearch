@@ -165,6 +165,10 @@ def attribute_filter(node: bpy.types.GeometryNode, name: str, prefs: prefs.Prefe
         searched_input = node.inputs[2].default_value
     elif isinstance(node, bpy.types.GeometryNodeRemoveAttribute):
         searched_input = node.inputs[1].default_value
+    
+    if searched_input is None:
+        return False
+    
     return search_string(name, searched_input, prefs, enable_regex=False)
 
 
@@ -304,8 +308,8 @@ class PerformNodeSearch(bpy.types.Operator):
 
         col = layout.column(align=True)
         if context.area.ui_type == 'GeometryNodeTree':
-            col.prop(prefs_, "filter_by_attribute")
-            if prefs_.filter_by_attribute:
+            col.prop(prefs_, "search_in_attribute")
+            if prefs_.search_in_attribute:
                 col.prop(prefs_, "attribute_search", text="", placeholder="Search in attributes")
 
         if len(NODE_TREE_NODES) > 0:
@@ -333,7 +337,7 @@ class PerformNodeSearch(bpy.types.Operator):
             if prefs_.search_in_node_groups:
                 filters_.add(lambda x: node_group_name_filter(x, self.search, prefs_))
 
-        if prefs_.filter_by_attribute and prefs_.attribute_search != "":
+        if prefs_.search_in_attribute and prefs_.attribute_search != "":
             filters_.add(lambda x: attribute_filter(x, prefs_.attribute_search, prefs_))
 
         if prefs_.search_unconnected:

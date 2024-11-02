@@ -87,9 +87,9 @@ class Preferences(bpy.types.AddonPreferences):
         default=False,
     )
 
-    filter_by_attribute: bpy.props.BoolProperty(
-        name="Filter by Attribute",
-        description="If toggled, \"Attribute Search\" will be used to filter nodes by usage of the attribute",
+    search_in_attribute: bpy.props.BoolProperty(
+        name="Search in Attributes",
+        description="If toggled, \"Attribute Search\" will be used to filter nodes by usage of specified attribute name",
         default=False,
     )
     attribute_search: bpy.props.StringProperty(
