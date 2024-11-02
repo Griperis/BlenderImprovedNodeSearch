@@ -20,6 +20,9 @@ NODE_TREE_OCCURRENCES = {}
 PATTERN = re.Pattern | None
 PATTERN_COMPILE_ERROR: str | None = None
 
+# Used to remove the duplicate suffix from the node name
+DUPLICATE_SUFFIX_PATTERN = re.compile(r"\.\d\d\d+$")
+
 
 FilterType = typing.Callable[[bpy.types.Node, str, bool], bool]
 
@@ -116,12 +119,22 @@ def get_all_found_nodes(include_nodegroups: bool = False) -> set[bpy.types.Node]
 def search_string(
     search: str, value: str, prefs: prefs.Preferences, enable_regex: bool = True
 ) -> str:
+    def _exact_matcher(search_: str, value_: str) -> bool:
+        if DUPLICATE_SUFFIX_PATTERN.search(value_):
+            value_ = value_.rsplit(".", 1)[0]
+        return search_ == value_
+    
+    def _contains_matcher(search_: str, value_: str) -> bool:
+        return search_ in value_
+
     if enable_regex and prefs.use_regex:
         return PATTERN.match(value) is not None
-
+    
+    matcher = _exact_matcher if prefs.exact_match else _contains_matcher
     if prefs.match_case:
-        return search in value
-    return search.lower() in value.lower()
+        return matcher(search, value)
+    
+    return matcher(search.lower(), value.lower())
 
 
 def node_name_filter(node: bpy.types.Node, name: str, prefs: prefs.Preferences) -> bool:
@@ -243,6 +256,13 @@ def _search_updated(op: bpy.types.OperatorProperties, context: bpy.types.Context
     # We treat the search always as a pattern, only show the error and use the pattern if
     # the user wants to use regex.
     try:
+        preferences = prefs.get_preferences(context) 
+        if preferences.exact_match and preferences.use_regex:
+            if not op.search.startswith("^"):
+                op.search = f"^{op.search}"
+            if not op.search.endswith("$"):
+                op.search = f"{op.search}$"
+
         PATTERN = re.compile(op.search)
     except re.error as e:
         print(f"Error compiling pattern: {e}")
@@ -288,6 +308,7 @@ class PerformNodeSearch(bpy.types.Operator):
         row.alert = False
         row.prop(prefs_, "use_regex", icon='SORTBYEXT', text="")
         row.prop(prefs_, "match_case", icon='SORTALPHA', text="")
+        row.prop(prefs_, "exact_match", icon='PIVOT_BOUNDBOX', text="")
 
         if prefs_.use_regex and is_regex_error:
             row = layout.row()

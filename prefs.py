@@ -17,6 +17,11 @@ class Preferences(bpy.types.AddonPreferences):
         description="If toggled, then the search will be case sensitive",
     )
 
+    exact_match: bpy.props.BoolProperty(
+        name="Exact Match",
+        description="If toggled, then only exact matches of the input will be searched",
+    )
+
     highlight_color: bpy.props.FloatVectorProperty(
         name="Highlight Color",
         description="Highlight color of the found nodes overlay",
