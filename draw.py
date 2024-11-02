@@ -243,7 +243,8 @@ def highlight_nodes(
         # This count is going to be > 0 only for node groups that should be highlighted with
         # the number text.
         inside_node_count = 0
-        if hasattr(node, "node_tree"):
+        # Support Serpens addon nodes (all of the nodes start with SN_), node_tree references to parent, there is no nesting.
+        if hasattr(node, "node_tree") and not node.bl_idname.startswith("SN_"):
             inside_node_count = node_tree_occurances.get(node.node_tree, 0)
 
         if is_node_partially_in_view(node, context):

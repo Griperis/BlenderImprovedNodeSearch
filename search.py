@@ -62,6 +62,7 @@ class NodeSearch:
                 hasattr(node, "node_tree")
                 and node.node_tree is not None
                 and self.search_in_node_groups
+                and node.node_tree != self.node_tree
             ):
                 self._search_and_recurse(node.node_tree, depth + 1)
                 # If any nodes are found inside the node group, we add the node group to the result
@@ -85,7 +86,7 @@ class NodeSearch:
             if node not in self.node_tree_finds[node_tree]:
                 continue
 
-            if hasattr(node, "node_tree") and node.node_tree is not None:
+            if hasattr(node, "node_tree") and node.node_tree is not None and node.node_tree != self.node_tree:
                 self.node_tree_leaf_nodes_count[node_tree] = self._leaf_nodes_count(node.node_tree)
             else:
                 self.node_tree_leaf_nodes_count[node_tree] += 1
@@ -263,7 +264,7 @@ class PerformNodeSearch(bpy.types.Operator):
     def draw(self, context: bpy.types.Context):
         prefs_ = prefs.get_preferences(context)
         layout = self.layout
-        if not context.area.ui_type.endswith("NodeTree"):
+        if not context.area.ui_type.endswith(("NodeTree", "NodesTree")):
             layout.label(text="Node search only works in node editors", icon='ERROR')
             return
 
