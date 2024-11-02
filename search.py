@@ -356,8 +356,9 @@ class PerformNodeSearch(bpy.types.Operator):
             self.report({'INFO'}, f"Found {len(found_nodes)} node(s)")
         else:
             self.report({'WARNING'}, "No nodes found")
-
-        # Find the node tree to search in and filter in the nodes
+        
+        if context.area:
+            context.area.tag_redraw()
         return {'FINISHED'}
 
     def invoke(self, context: bpy.types.Context, event: bpy.types.Event):
@@ -402,6 +403,8 @@ class ClearSearch(bpy.types.Operator):
     def execute(self, context: bpy.types.Context):
         NODE_TREE_NODES.clear()
         NODE_TREE_OCCURRENCES.clear()
+        if context.area:
+            context.area.tag_redraw()
         return {'FINISHED'}
 
 
