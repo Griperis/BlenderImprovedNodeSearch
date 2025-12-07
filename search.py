@@ -155,6 +155,24 @@ def node_group_name_filter(node: bpy.types.Node, value: str, prefs: prefs.Prefer
     return search_string(value, node.node_tree.name, prefs)
 
 
+def socket_filter(node: bpy.types.Node, value: str, prefs: prefs.Preferences) -> bool:
+    sockets = []
+    if prefs.socket_search_inputs:
+        sockets.extend(node.inputs)
+    if prefs.socket_search_outputs:
+        sockets.extend(node.outputs)
+
+    for socket in sockets:
+        if prefs.socket_search_name:
+            if search_string(value, socket.name, prefs, enable_regex=False):
+                return True
+        if prefs.socket_search_type:
+            if search_string(value, socket.bl_idname, prefs, enable_regex=False):
+                return True
+
+    return False
+
+
 def attribute_filter(node: bpy.types.GeometryNode, name: str, prefs: prefs.Preferences) -> bool:
     if (
         isinstance(
@@ -269,6 +287,68 @@ def _search_updated(op: bpy.types.OperatorProperties, context: bpy.types.Context
         PATTERN_COMPILE_ERROR = str(e)
 
 
+class ShowHelp(bpy.types.Operator):
+    bl_idname = "improved_node_search.show_help"
+    bl_label = "Show Help"
+    bl_description = "Show help about using the Improved Node Search"
+
+    def draw(self, context: bpy.types.Context):
+        layout = self.layout
+        col = layout.column(align=True)
+        col.label(text="Improved Node Search Help", icon='HELP')
+        
+        # Search options
+        sub = col.box().column(align=True)
+        sub.label(text="\"Search\"", icon='VIEWZOOM')
+        sub.label(text="- Type your search term and choose what to search in (Name, Label, Node Type).")
+        sub.label(text="- You can also enable special filters to find disconnected nodes, unused nodes")
+        sub.label(text="  or nodes with missing images/groups.")
+        sub.separator()
+        sub.label(text="Additional options", icon='ADD')
+        sub.label(text="- You can use regular expressions by toggling the regex option.")
+        sub.label(text="- Make sure to handle special characters properly in regex mode.")
+        sub.label(text="- Exact match option will match the whole string, otherwise partial matches are found.")
+        sub.label(text="- Match case option makes the search case sensitive.")
+        
+        # Search in attributes
+        sub = col.box().column(align=True)
+        sub.label(text="\"Search in Attributes\"", icon='LATTICE_DATA')
+        sub.label(text=" - Toggle 'Search in Attributes' to filter nodes that use a specific attribute name.")
+        sub.label(text=" - Provide the attribute name in the 'Attribute Search' field.")
+        sub.separator()
+        sub.label(text="Combination with other search options", icon='SEQ_STRIP_DUPLICATE')
+        sub.label(text=" - This adds an additional filter on top of the main search criteria, allowing more refined search.")
+        sub.label(text=" - To search only by attribute, disable search options in nodes' 'Search in Name', 'Search in Label', etc.")
+        sub.separator()
+        sub.label(text="This works only in Geometry Nodes editor.")
+
+        # Search in sockets
+        sub = col.box().column(align=True)
+        sub.label(text="\"Search in Sockets\"", icon='KEYTYPE_KEYFRAME_VEC')
+        sub.label(text=" - Toggle 'Search in Sockets' to filter nodes by their sockets.")
+        sub.label(text=" - Provide the socket name or type in the 'Socket Search' field.")
+        sub.label(text=" - Use the toggles to specify whether to search by socket name, type, in inputs or in outputs.")
+        sub.separator()
+        sub.label(text="Combination with other search options", icon='SEQ_STRIP_DUPLICATE')
+        sub.label(text=" - This adds an additional filter on top of the main search criteria, allowing more refined search.")
+        sub.label(text=" - To search only by sockets, disable search options in nodes' 'Search in Name', 'Search in Label', etc.")
+
+
+        row = col.row()
+        row.label(text="Thanks for using the extension, feel free to reach out on GitHub.", icon='FUND')
+        row.operator("wm.url_open", text="", icon='URL').url = "https://github.com/Griperis/BlenderImprovedNodeSearch"
+
+
+    def invoke(self, context: bpy.types.Context, event: bpy.types.Event):
+        return context.window_manager.invoke_popup(self, width=500)
+
+    def execute(self, context: bpy.types.Context):
+        return {'FINISHED'}
+
+
+CLASSES.append(ShowHelp)
+
+
 class PerformNodeSearch(bpy.types.Operator):
     bl_idname = "improved_node_search.search"
     bl_label = "Search"
@@ -309,6 +389,7 @@ class PerformNodeSearch(bpy.types.Operator):
         row.prop(prefs_, "use_regex", icon='SORTBYEXT', text="")
         row.prop(prefs_, "match_case", icon='SORTALPHA', text="")
         row.prop(prefs_, "exact_match", icon='PIVOT_BOUNDBOX', text="")
+        row.operator(ShowHelp.bl_idname, icon='HELP', text="", emboss=False )
 
         if prefs_.use_regex and is_regex_error:
             row = layout.row()
@@ -327,11 +408,21 @@ class PerformNodeSearch(bpy.types.Operator):
         col.prop(prefs_, "search_missing_images")
         col.prop(prefs_, "search_missing_node_groups")
 
-        col = layout.column(align=True)
         if context.area.ui_type == 'GeometryNodeTree':
+            col = layout.column(align=True)
             col.prop(prefs_, "search_in_attribute")
             if prefs_.search_in_attribute:
                 col.prop(prefs_, "attribute_search", text="", placeholder="Search in attributes")
+
+        col = layout.column(align=True)
+        col.prop(prefs_, "search_in_sockets")
+        if prefs_.search_in_sockets:
+            row = col.row(align=True)
+            row.prop(prefs_, "socket_search", text="", placeholder="Search in sockets")
+            row.prop(prefs_, "socket_search_type", toggle=True, text="", icon='KEYTYPE_KEYFRAME_VEC')
+            row.prop(prefs_, "socket_search_name", toggle=True, text="", icon='FONT_DATA')
+            row.prop(prefs_, "socket_search_inputs", toggle=True, text="", icon='TRIA_RIGHT')
+            row.prop(prefs_, "socket_search_outputs", toggle=True, text="", icon='TRIA_LEFT')
 
         if len(NODE_TREE_NODES) > 0:
             layout.operator(ClearSearch.bl_idname, icon='PANEL_CLOSE', text="Clear Previous Search")
@@ -360,6 +451,9 @@ class PerformNodeSearch(bpy.types.Operator):
 
         if prefs_.search_in_attribute and prefs_.attribute_search != "":
             filters_.add(lambda x: attribute_filter(x, prefs_.attribute_search, prefs_))
+
+        if prefs_.search_in_sockets and prefs_.socket_search != "":
+            filters_.add(lambda x: socket_filter(x, prefs_.socket_search, prefs_))
 
         if prefs_.search_unconnected:
             filters_.add(lambda x: unconnected_node_filter(x))

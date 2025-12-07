@@ -92,6 +92,7 @@ class Preferences(bpy.types.AddonPreferences):
         default=False,
     )
 
+    # Attribute search
     search_in_attribute: bpy.props.BoolProperty(
         name="Search in Attributes",
         description="If toggled, \"Attribute Search\" will be used to filter nodes by usage of specified attribute name",
@@ -101,6 +102,38 @@ class Preferences(bpy.types.AddonPreferences):
         name="Attribute Search",
         description="Text to search inside attributes when \"Filter by Attribute\" is toggled",
     )
+
+    # Socket search
+    search_in_sockets: bpy.props.BoolProperty(
+        name="Search in Sockets",
+        description="If toggled, \"Socket Search\" will be used to filter nodes by their sockets",
+        default=False,
+    )
+    socket_search: bpy.props.StringProperty(
+        name="Socket Search",
+        description="Text to search inside sockets when \"Search in Sockets\" is toggled",
+    )
+    socket_search_type: bpy.props.BoolProperty(
+        name="Search by Socket Type",
+        description="If toggled, the \"Socket Search\" will include socket types",
+        default=False,
+    )
+    socket_search_name: bpy.props.BoolProperty(
+        name="Search by Socket Name",
+        description="If toggled, the \"Socket Search\" will include socket names",
+        default=True,
+    )
+    socket_search_inputs: bpy.props.BoolProperty(
+        name="Search in Input Sockets",
+        description="Include input sockets in the \"Socket Search\"",
+        default=True,
+    )
+    socket_search_outputs: bpy.props.BoolProperty(
+        name="Search in Output Sockets",
+        description="Include output sockets in the \"Socket Search\"",
+        default=True,
+    )
+
 
 
 def get_preferences(context: typing.Optional[bpy.types.Context] = None) -> Preferences:

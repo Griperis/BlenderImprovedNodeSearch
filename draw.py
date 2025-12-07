@@ -7,7 +7,6 @@ import bpy
 import blf
 import mathutils
 import gpu
-import gpu_extras.presets
 import math
 import gpu_extras.batch
 from . import prefs
